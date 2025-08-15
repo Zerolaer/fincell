@@ -192,6 +192,7 @@
         <span id="authStatus" class="btn" style="pointer-events:none;opacity:.8">Статус…</span>
         <button id="syncNowBtn" class="btn">Синхронизировать</button>
         <button id="openAuthBtn" class="btn" onclick="window.__openAuthGlobal && window.__openAuthGlobal()">Войти</button>
+        <button id="diagBtn" class="btn">Диагностика</button>
         <button id="addIncome" class="btn">+ Категория дохода</button>
         <button id="addExpense" class="btn">+ Категория расхода</button>
         <button id="reset" class="btn danger">Сбросить всё</button>
@@ -301,7 +302,41 @@ if (authSignInBtn) {
       if (error) { if (authError) authError.textContent = error.message; return; }
       closeAuth();
       await remoteFetchAndApplyState(); // pulls cloud; if missing row → pushes local
-      refreshAuthStatus();
+      refreshAuthStatusSafe();
+
+  function showToast(msg, ok=false){
+    const t = document.getElementById('toast'); if(!t) return;
+    t.className = ok ? 'ok' : 'err';
+    t.textContent = String(msg||''); t.style.display='block';
+    setTimeout(()=>{ t.style.display='none'; }, 5000);
+  }
+
+  const diagBtn = document.getElementById('diagBtn');
+  if (diagBtn){
+    diagBtn.addEventListener('click', async ()=>{
+      try{
+        if(!supa){ showToast('Supabase клиент не инициализирован. Проверьте URL/KEY в файле.', false); return; }
+        const { data: sessionData, error: sErr } = await supa.auth.getSession();
+        if (sErr) { showToast('auth.getSession error: '+ sErr.message, false); return; }
+        if (!sessionData?.session){ showToast('Сессии нет. Нажмите "Войти" и авторизуйтесь.', false); return; }
+        const { data, error } = await supa.from(SUPA_TABLE).select('year').limit(1);
+        if (error) { showToast('DB select error: '+ error.message, false); return; }
+        showToast('Соединение ОК. Сессия активна. База доступна.', true);
+      } catch(e){ showToast('Diag exception: '+ (e?.message||e), false); }
+    });
+  }
+
+  async function refreshAuthStatusSafe(){
+    try{
+      if (!authStatus) return;
+      if (!supa) { authStatus.textContent='Offline'; return; }
+      const { data, error } = await supa.auth.getSession();
+      if (error){ authStatus.textContent='Ошибка'; showToast('getSession: '+ error.message, false); return; }
+      authStatus.textContent = data?.session ? 'Signed in' : 'Signed out';
+    }catch(e){ authStatus.textContent='Ошибка'; showToast('refreshAuthStatus exception: '+ (e?.message||e), false); }
+  }
+  // Replace previous calls
+
     } catch(e){ if (authError) authError.textContent="Ошибка входа"; }
   });
 }
@@ -323,12 +358,15 @@ if (authSignUpBtn) {
 
 // Status
 async function refreshAuthStatus(){
+  return refreshAuthStatusSafe();
+}
+async function legacyRefreshAuthStatus(){
   if (!authStatus) return;
   if (!supa) { authStatus.textContent="Offline"; return; }
   const { data } = await supa.auth.getSession();
   authStatus.textContent = data?.session ? "Signed in" : "Signed out";
 }
-if (supa){ supa.auth.onAuthStateChange(()=>refreshAuthStatus()); }
+if (supa){ supa.auth.onAuthStateChange(()=>refreshAuthStatusSafe()); }
 
 async function remoteFetchAndApplyState(){
   if (!supa) return;
@@ -1250,8 +1288,50 @@ async function remoteUpsertState(){
   updateProgressAll();
   if (supa) { remoteFetchAndApplyState(); }
   if (syncNowBtn) syncNowBtn.addEventListener('click', ()=>{ if (supa) remoteFetchAndApplyState(); });
-  refreshAuthStatus();
+  refreshAuthStatusSafe();
+
+  function showToast(msg, ok=false){
+    const t = document.getElementById('toast'); if(!t) return;
+    t.className = ok ? 'ok' : 'err';
+    t.textContent = String(msg||''); t.style.display='block';
+    setTimeout(()=>{ t.style.display='none'; }, 5000);
+  }
+
+  const diagBtn = document.getElementById('diagBtn');
+  if (diagBtn){
+    diagBtn.addEventListener('click', async ()=>{
+      try{
+        if(!supa){ showToast('Supabase клиент не инициализирован. Проверьте URL/KEY в файле.', false); return; }
+        const { data: sessionData, error: sErr } = await supa.auth.getSession();
+        if (sErr) { showToast('auth.getSession error: '+ sErr.message, false); return; }
+        if (!sessionData?.session){ showToast('Сессии нет. Нажмите "Войти" и авторизуйтесь.', false); return; }
+        const { data, error } = await supa.from(SUPA_TABLE).select('year').limit(1);
+        if (error) { showToast('DB select error: '+ error.message, false); return; }
+        showToast('Соединение ОК. Сессия активна. База доступна.', true);
+      } catch(e){ showToast('Diag exception: '+ (e?.message||e), false); }
+    });
+  }
+
+  async function refreshAuthStatusSafe(){
+    try{
+      if (!authStatus) return;
+      if (!supa) { authStatus.textContent='Offline'; return; }
+      const { data, error } = await supa.auth.getSession();
+      if (error){ authStatus.textContent='Ошибка'; showToast('getSession: '+ error.message, false); return; }
+      authStatus.textContent = data?.session ? 'Signed in' : 'Signed out';
+    }catch(e){ authStatus.textContent='Ошибка'; showToast('refreshAuthStatus exception: '+ (e?.message||e), false); }
+  }
+  // Replace previous calls
+
 })();
 </script>
+
+  <style>
+    #toast{position:fixed;right:12px;bottom:110px;z-index:9999;max-width:420px;padding:12px 14px;border-radius:10px;border:1px solid #3a4256;background:#0f131a;box-shadow:0 6px 24px rgba(0,0,0,.4);font-size:12px;line-height:1.4;display:none;white-space:pre-wrap}
+    #toast.ok{border-color:#2a7b4b}
+    #toast.err{border-color:#7b2d2d}
+  </style>
+  <div id="toast"></div>
+
 </body>
 </html>
