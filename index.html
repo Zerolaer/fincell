@@ -132,7 +132,6 @@
 
 
   <script>
-    // Global fallback: open auth modal even if main JS didn't attach handlers
     window.__openAuthGlobal = function() {
       try {
         var el = document.getElementById('authBackdrop');
@@ -141,8 +140,15 @@
         el.setAttribute('aria-hidden','false');
         var email = document.getElementById('authEmail');
         if (email) setTimeout(function(){ email.focus(); }, 0);
-      } catch(e) { /* no-op */ }
+      } catch(e) {}
     };
+    document.addEventListener('keydown', function(e){
+      const mac = navigator.platform.toUpperCase().indexOf('MAC')>=0;
+      if ((mac && e.metaKey && e.key.toLowerCase()==='l') || (!mac && e.ctrlKey && e.key.toLowerCase()==='l')) {
+        if (window.__openAuthGlobal) window.__openAuthGlobal();
+        e.preventDefault();
+      }
+    });
   </script>
 
 </head>
@@ -152,9 +158,9 @@
   <div class="modal-backdrop" id="authBackdrop" aria-hidden="true" style="display:none">
     <div class="modal" role="dialog" aria-modal="true" aria-labelledby="authTitle">
       <h3 id="authTitle">Вход</h3>
-      <div class="meta">Войдите с вашим e‑mail и паролем (единственный пользователь).</div>
+      <div class="meta">Войдите с вашим e-mail и паролем (единственный пользователь).</div>
       <div class="row onecol">
-        <input type="email" id="authEmail" placeholder="E‑mail" />
+        <input type="email" id="authEmail" placeholder="E-mail" />
       </div>
       <div class="row onecol">
         <input type="password" id="authPassword" placeholder="Пароль" />
@@ -184,6 +190,7 @@
       </div>
       <div class="toolbar">
         <span id="authStatus" class="btn" style="pointer-events:none;opacity:.8">Статус…</span>
+        <button id="syncNowBtn" class="btn">Синхронизировать</button>
         <button id="openAuthBtn" class="btn" onclick="window.__openAuthGlobal && window.__openAuthGlobal()">Войти</button>
         <button id="addIncome" class="btn">+ Категория дохода</button>
         <button id="addExpense" class="btn">+ Категория расхода</button>
@@ -254,104 +261,107 @@
 
 <script>
 (() => {
-// ===== Supabase config =====
+
+// ===== Supabase config & helpers =====
 const SUPABASE_URL = "https://bgmqpojjkkjxobsmnxyl.supabase.co";
 const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImJnbXFwb2pqa2tqeG9ic21ueHlsIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTUyNTkyMjUsImV4cCI6MjA3MDgzNTIyNX0.SkS9_em7sH6Ei5rAzEhDzr7sY6QoEOvIoRFOdTDv_bA";
-const SUPA_TABLE = "fincell_states"; // single JSON state per user/year
-
+const SUPA_TABLE = "fincell_states";
 
 let supa = null;
-const keysFilled = SUPABASE_URL && !SUPABASE_URL.includes("PASTE_YOUR") && SUPABASE_ANON_KEY && !SUPABASE_ANON_KEY.includes("PASTE_YOUR");
+const keysFilled = SUPABASE_URL && SUPABASE_ANON_KEY;
 if (window.supabase && keysFilled) {
   supa = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 }
 
-// Simple auth UI handling (one user)
+// Auth elements
 const authBackdrop = document.getElementById("authBackdrop");
 const authEmail = document.getElementById("authEmail");
 const authPassword = document.getElementById("authPassword");
 const authSignInBtn = document.getElementById("authSignInBtn");
-
 const authSignUpBtn = document.getElementById("authSignUpBtn");
-if (authSignUpBtn) {
-  authSignUpBtn.addEventListener("click", async () => {
-    try {
-      authError.textContent = "";
-      const email = (authEmail.value||"").trim();
-      const password = authPassword.value||"";
-      if (!email || !password) { authError.textContent="Введите e-mail и пароль"; return; }
-      if (!supa) { authError.textContent = "Supabase не инициализирован. Проверьте SUPABASE_URL и SUPABASE_ANON_KEY."; return; }
-      const { data, error } = await supa.auth.signUp({ email, password });
-      if (error) { authError.textContent = error.message; return; }
-      // If email confirmations are required and SMTP is configured, user must confirm via email
-      authError.style.color = "#a8f5a2";
-      authError.textContent = "Регистрация отправлена. Если включено подтверждение по e-mail — проверьте почту. Либо создайте/подтвердите пользователя в панели Supabase.";
-    } catch (e) {
-      authError.textContent = "Ошибка регистрации";
-    }
-  });
-}
-
 const authCloseBtn = document.getElementById("authCloseBtn");
 const authError = document.getElementById("authError");
+const authStatus = document.getElementById("authStatus");
+const syncNowBtn = document.getElementById("syncNowBtn");
 
-function openAuth() { authBackdrop.style.display = "flex"; authBackdrop.setAttribute("aria-hidden","false"); setTimeout(()=>authEmail.focus(),0); }
-function closeAuth() { authBackdrop.style.display = "none"; authBackdrop.setAttribute("aria-hidden","true"); authError.textContent=""; }
+function openAuth(){ if (!authBackdrop) return; authBackdrop.style.display='flex'; authBackdrop.setAttribute('aria-hidden','false'); setTimeout(()=>authEmail&&authEmail.focus(),0); }
+function closeAuth(){ if (!authBackdrop) return; authBackdrop.style.display='none'; authBackdrop.setAttribute('aria-hidden','true'); if (authError) authError.textContent=''; }
+
+if (authCloseBtn) authCloseBtn.addEventListener("click", closeAuth);
 
 if (authSignInBtn) {
   authSignInBtn.addEventListener("click", async () => {
     try {
-      authError.textContent = "";
-      const email = (authEmail.value||"").trim();
-      const password = authPassword.value||"";
-      if (!email || !password) { authError.textContent="Введите e‑mail и пароль"; return; }
-      const { data, error } = await supa.auth.signInWithPassword({ email, password });
-      if (error) { authError.textContent = error.message; return; }
+      if (authError) authError.textContent="";
+      const email = (authEmail?.value||"").trim();
+      const password = authPassword?.value||"";
+      if (!email || !password) { if (authError) authError.textContent="Введите e-mail и пароль"; return; }
+      if (!supa) { if (authError) authError.textContent="Supabase не инициализирован. Проверьте ключи."; return; }
+      const { error } = await supa.auth.signInWithPassword({ email, password });
+      if (error) { if (authError) authError.textContent = error.message; return; }
       closeAuth();
-      await remoteFetchAndApplyState();
-    } catch (e) { authError.textContent = "Ошибка входа"; }
+      await remoteFetchAndApplyState(); // pulls cloud; if missing row → pushes local
+      refreshAuthStatus();
+    } catch(e){ if (authError) authError.textContent="Ошибка входа"; }
   });
 }
-if (authCloseBtn) authCloseBtn.addEventListener("click", closeAuth);
 
-// Remote state helpers
-async function remoteFetchAndApplyState() {
+if (authSignUpBtn) {
+  authSignUpBtn.addEventListener("click", async () => {
+    try {
+      if (authError) authError.textContent="";
+      const email = (authEmail?.value||"").trim();
+      const password = authPassword?.value||"";
+      if (!email || !password) { if (authError) authError.textContent="Введите e-mail и пароль"; return; }
+      if (!supa) { if (authError) authError.textContent="Supabase не инициализирован."; return; }
+      const { error } = await supa.auth.signUp({ email, password });
+      if (error) { if (authError) authError.textContent = error.message; return; }
+      if (authError){ authError.style.color="#a8f5a2"; authError.textContent="Регистрация отправлена. Если включено подтверждение — проверьте почту, либо создайте пользователя в панели Supabase."; }
+    } catch(e){ if (authError) authError.textContent="Ошибка регистрации"; }
+  });
+}
+
+// Status
+async function refreshAuthStatus(){
+  if (!authStatus) return;
+  if (!supa) { authStatus.textContent="Offline"; return; }
+  const { data } = await supa.auth.getSession();
+  authStatus.textContent = data?.session ? "Signed in" : "Signed out";
+}
+if (supa){ supa.auth.onAuthStateChange(()=>refreshAuthStatus()); }
+
+async function remoteFetchAndApplyState(){
   if (!supa) return;
   const { data: sessionData } = await supa.auth.getSession();
   if (!sessionData?.session) { openAuth(); return; }
-
-  const { data, error } = await supa
-    .from(SUPA_TABLE)
-    .select("state")
-    .eq("year", YEAR)
-    .single();
-
-  if (error && error.code !== "PGRST116") { // not found is fine
-    console.warn("Supabase load error:", error);
-    return;
+  const { data, error } = await supa.from(SUPA_TABLE).select("state").eq("year", YEAR).single();
+  if (error){
+    if (error.code == "PGRST116"){ // no row
+      await remoteUpsertState();
+      return;
+    } else {
+      console.warn("Supabase load error:", error);
+      return;
+    }
   }
-  if (data?.state) {
+  if (data?.state){
     try {
       model = migrate(data.state);
-      // Save local cache too
       localStorage.setItem(storeKey, JSON.stringify(model));
       rebuildBody();
-    } catch (e) { console.warn("Apply remote state failed", e); }
+    } catch(e){ console.warn("Apply remote state failed", e); }
   }
 }
 
-// Fire-and-forget upsert
-async function remoteUpsertState() {
+async function remoteUpsertState(){
   try {
     if (!supa) return;
     const { data: sessionData } = await supa.auth.getSession();
-    if (!sessionData?.session) return; // not logged in yet
+    if (!sessionData?.session) return;
     const payload = { year: YEAR, state: model };
-    const { error } = await supa
-      .from(SUPA_TABLE)
-      .upsert(payload, { onConflict: "year" }); // unique by user/year via RLS user_id
+    const { error } = await supa.from(SUPA_TABLE).upsert(payload, { onConflict: "user_id,year" });
     if (error) console.warn("Supabase upsert error:", error);
-  } catch (e) { console.warn("Supabase upsert failed", e); }
+  } catch(e){ console.warn("Supabase upsert failed", e); }
 }
 
   const YEAR = 2025;
@@ -384,7 +394,6 @@ async function remoteUpsertState() {
     localStorage.setItem(storeKey, JSON.stringify(model));
     renderTotalsPanel();
     syncTotalsLayout();
-    // also sync to Supabase (fire-and-forget)
     remoteUpsertState();
   }
 
@@ -1239,36 +1248,10 @@ async function remoteUpsertState() {
   renderCurrentMonthHighlight();
   renderTotalsPanel();
   updateProgressAll();
-
-  // After boot: try to fetch remote state (will prompt auth if needed)
   if (supa) { remoteFetchAndApplyState(); }
-
-  // Auth status indicator
-  const authStatus = document.getElementById("authStatus");
-  async function refreshAuthStatus() {
-    if (!authStatus) return;
-    if (!supa) { authStatus.textContent = "Offline"; return; }
-    const { data } = await supa.auth.getSession();
-    authStatus.textContent = data?.session ? "Signed in" : "Signed out";
-  }
-  if (supa) {
-    supa.auth.onAuthStateChange(() => { refreshAuthStatus(); });
-  }
+  if (syncNowBtn) syncNowBtn.addEventListener('click', ()=>{ if (supa) remoteFetchAndApplyState(); });
   refreshAuthStatus();
-
-
 })();
 </script>
-
-  <script>
-    document.addEventListener('keydown', function(e){
-      const mac = navigator.platform.toUpperCase().indexOf('MAC')>=0;
-      if ((mac && e.metaKey && e.key.toLowerCase()==='l') || (!mac && e.ctrlKey && e.key.toLowerCase()==='l')) {
-        if (window.__openAuthGlobal) window.__openAuthGlobal();
-        e.preventDefault();
-      }
-    });
-  </script>
-
 </body>
 </html>
