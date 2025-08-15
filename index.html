@@ -1,0 +1,1274 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Fincell — Управление финансами (2025)</title>
+<style>
+  :root {
+    --bg: #0f1115;
+    --panel: #161a22;
+    --grid: #1e2430;
+    --grid-2: #262d3a;
+    --text: #e9eef7;
+    --muted: #a8b2c3;
+    --accent: #4f8cff;
+    --good: #41c77a;
+    --bad: #ff6b6b;
+    --shadow: 0 4px 16px rgba(0,0,0,.35);
+    --month-highlight: rgba(79,140,255,.10);
+    --month-highlight-border: rgba(79,140,255,.35);
+    --border: 1px solid #2a3242;
+    --ctx-bg: #0e121a;
+    --ctx-hover: #1a2232;
+    --first-col: 300px; /* фиксируем ширину первой колонки */
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; background: radial-gradient(1200px 800px at 20% -10%, #171c25 0%, #0f1115 60%); color: var(--text); font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Inter, "SF Pro Text", "Helvetica Neue", Arial, "Apple Color Emoji", "Segoe UI Emoji"; }
+
+  /* Скрываем нативные скроллы (и вертикальный, и горизонтальный), оставляя только кастомные индикаторы */
+  html, body, .grid-wrap, .totals-scroller {
+    scrollbar-width: none; /* Firefox */
+  }
+  html::-webkit-scrollbar, body::-webkit-scrollbar,
+  .grid-wrap::-webkit-scrollbar, .totals-scroller::-webkit-scrollbar {
+    width: 0; height: 0; /* Chrome/Safari/Edge */
+  }
+
+  header { position: sticky; top: 0; z-index: 5; background: linear-gradient(180deg, rgba(15,17,21,.85), rgba(15,17,21,.65) 60%, rgba(15,17,21,0)); backdrop-filter: blur(8px); padding: 10px clamp(12px, 3vw, 24px); box-shadow: inset 0 -1px 0 rgba(255,255,255,.04); }
+  .hdr { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+  .brand { display: inline-flex; align-items: center; gap: 10px; }
+  .logo { width: 36px; height: 36px; border-radius: 10px; background: conic-gradient(from 210deg, #4f8cff, #41c77a, #4f8cff); box-shadow: var(--shadow), inset 0 0 18px rgba(255,255,255,.12); display: inline-grid; place-items: center; border: var(--border); }
+  .logo svg { opacity: .9; }
+  .title { display: grid; line-height: 1.1; }
+  .title .name { font-weight: 800; font-size: 18px; letter-spacing: .2px; }
+  .title .sub { color: var(--muted); font-size: 12px; }
+  .toolbar { display: inline-flex; gap: 8px; flex-wrap: wrap; }
+  .btn { border: var(--border); background: linear-gradient(180deg, #263049, #1d2431); color: var(--text); border-radius: 8px; padding: 8px 12px; cursor: pointer; box-shadow: var(--shadow); font-size: 13px; }
+  .btn:hover { filter: brightness(1.05); }
+  .btn.danger { background: #7b2d2d; }
+
+  .grid-wrap { padding: 12px clamp(8px, 3vw, 24px) 180px; overflow: auto; }
+  table { border-collapse: separate; border-spacing: 0; width: 100%; min-width: 1100px; background: linear-gradient(180deg, #121721, #10141b); border-radius: 12px; }
+  thead th { position: sticky; top: 64px; background: #141a24; z-index: 3; }
+  th, td { border-right: var(--border); border-bottom: var(--border); padding: 8px 10px; text-align: right; vertical-align: middle; font-size: 13px; }
+  th:first-child, td:first-child { text-align: left; position: sticky; left: 0; z-index: 2; background: #141a24; min-width: var(--first-col); width: var(--first-col); max-width: var(--first-col); }
+  thead th:first-child { z-index: 4; }
+  thead th.month { text-align: center; font-weight: 600; letter-spacing: .2px; color: var(--muted); min-width: 80px; }
+  tr.section-row th { background: #151c27; font-weight: 700; letter-spacing: .4px; color: #cdd6e6; }
+  td.cell { cursor: pointer; background-image: linear-gradient(180deg, rgba(255,255,255,.012), rgba(0,0,0,.04)); }
+  td.cell:hover { background-color: rgba(255,255,255,.04); }
+  td.cell.current-month, thead th.month.current-month { background-image: none; background-color: var(--month-highlight); }
+  thead th.month.current-month { box-shadow: inset 0 -2px 0 0 var(--month-highlight-border); color: #d7e3ff; }
+  td.cell.current-month { box-shadow: inset 0 0 0 1px var(--month-highlight-border); }
+
+  .modal-backdrop { position: fixed; inset: 0; background: rgba(0,0,0,.45); display: none; align-items: center; justify-content: center; z-index: 1000; }
+  .modal { background: #0f131a; border: var(--border); border-radius: 12px; box-shadow: var(--shadow); width: min(720px, 96vw); padding: 16px; }
+  .modal h3 { margin: 0 0 8px 0; font-size: 16px; }
+  .modal .meta { color: var(--muted); font-size: 12px; margin-bottom: 12px; }
+  .modal .row { display: grid; grid-template-columns: 1fr 2fr auto; gap: 8px; margin-bottom: 8px; }
+  .modal .row.onecol { grid-template-columns: 1fr auto; }
+  .modal input, .modal textarea { width: 100%; padding: 8px 10px; border-radius: 8px; border: var(--border); background: #131823; color: var(--text); font-size: 13px; }
+  .modal .actions { display: flex; gap: 8px; justify-content: flex-end; margin-top: 12px; }
+  .entry-list { border-top: var(--border); margin-top: 12px; padding-top: 8px; max-height: 260px; overflow: auto; }
+  .entry { display: grid; grid-template-columns: 18px 110px 1fr auto; gap: 8px; align-items: center; padding: 6px 0; border-bottom: 1px dashed #283046; }
+  .entry .drag { width: 16px; height: 16px; border-radius: 4px; background: #21293a; border: var(--border); display: inline-flex; align-items: center; justify-content: center; font-size: 10px; color: var(--muted); cursor: grab; }
+  .entry input { width: 100%; }
+  .entry .delete { padding: 4px 8px; border-radius: 6px; border: var(--border); background: #7b2d2d; color: var(--text); cursor: pointer; }
+  .entry.drag-over { background: rgba(255,255,255,.05); }
+
+  .no-records { display: flex; align-items: center; justify-content: center; min-height: 90px; color: var(--muted); text-align: center; }
+
+  .cat-cell { display: flex; align-items: center; gap: 10px; user-select: none; overflow: hidden; }
+  .cell-left { display: inline-flex; align-items: center; gap: 10px; overflow: hidden; }
+  .cat-name { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .spacer { flex: 1 1 auto; }
+  .collapse-btn { border: var(--border); background: #1b2230; color: var(--text); padding: 2px 8px; border-radius: 6px; font-size: 12px; cursor: pointer; }
+  .collapse-btn:hover { filter: brightness(1.05); }
+  .color-dot { width: 12px; height: 12px; border-radius: 50%; border: 2px solid #0d1220; box-shadow: 0 0 0 1px rgba(255,255,255,.08), inset 0 0 4px rgba(0,0,0,.4); }
+  .drag-handle { width: 14px; height: 14px; border-radius: 4px; background: #21293a; border: var(--border); display: inline-flex; align-items: center; justify-content: center; font-size: 10px; color: var(--muted); cursor: grab; flex: 0 0 auto; }
+  .cat-name[contenteditable="true"] { outline: 1px dashed #37528f; border-radius: 6px; padding: 2px 4px; background: #101420; }
+  tr.drag-over td, tr.drag-over th { background: rgba(255,255,255,.04); }
+
+  .sub th:first-child { padding-left: 18px; }
+  .sub .cat-name { opacity: .95; }
+
+  .totals-fixed { position: fixed; left: 0; right: 0; bottom: 0; z-index: 40; padding: 10px 0; background: linear-gradient(180deg, rgba(15,17,21,.35), rgba(15,17,21,.85)); backdrop-filter: blur(8px); box-shadow: 0 -1px 0 rgba(255,255,255,.05), var(--shadow); border-top: var(--border); }
+  .totals-inner { padding: 0 clamp(8px, 3vw, 24px); }
+  .totals-scroller { overflow: hidden; }
+  .totals-grid { display: grid; grid-auto-rows: minmax(32px, auto); white-space: nowrap; border: var(--border); border-radius: 10px; overflow: hidden; }
+  .tg-cell { padding: 8px 10px; border-right: var(--border); background: #121722; text-align: right; font-size: 12px; }
+  .tg-head { background: #151c27; font-weight: 700; text-align: left; }
+  .tg-row + .tg-row .tg-cell { border-top: var(--border); }
+  .tg-annual { background: #0f151f; font-weight: 700; }
+  .tg-cell.current-month { background: var(--month-highlight); box-shadow: inset 0 0 0 1px var(--month-highlight-border); }
+  .tg-good { color: var(--good); } .tg-bad { color: var(--bad); }
+
+  .ctx { position: fixed; z-index: 60; background: var(--ctx-bg); border: var(--border); border-radius: 10px; box-shadow: var(--shadow); min-width: 260px; padding: 6px; display:none; }
+  .ctx .item { display: flex; align-items: center; gap: 10px; padding: 8px 10px; border-radius: 8px; cursor: pointer; font-size: 13px; }
+  .ctx .item:hover { background: var(--ctx-hover); }
+  .ctx .item.danger { color: #ff9b9b; }
+  .ctx .row { padding: 6px 8px; border-top: var(--border); margin-top: 6px; }
+  .ctx .label { font-size: 11px; color: var(--muted); margin-bottom: 6px; }
+  .ctx .palette { display: grid; grid-template-columns: repeat(8, 18px); gap: 6px; }
+  .ctx .sw { width: 18px; height: 18px; border-radius: 50%; border: 2px solid #0d1220; cursor: pointer; box-shadow: 0 0 0 1px rgba(255,255,255,.08); }
+
+  /* КАСТОМНЫЕ ИНДИКАТОРЫ СКРОЛЛА */
+  .progress-v, .progress-h { position: fixed; pointer-events: none; opacity: 0; transition: opacity .25s ease; z-index: 45; }
+  .progress-v { right: 8px; top: 76px; bottom: 76px; width: 4px; border-radius: 999px; background: rgba(255,255,255,.06); box-shadow: inset 0 0 0 1px rgba(255,255,255,.06); }
+  .progress-v .thumb { position: absolute; left: 0; width: 100%; height: 20%; border-radius: 999px; background: linear-gradient(180deg, rgba(79,140,255,.9), rgba(79,140,255,.6)); box-shadow: 0 0 12px rgba(79,140,255,.45); transform: translateY(var(--y, 0px)); }
+  .progress-h { left: 50%; transform: translateX(-50%); bottom: 86px; height: 4px; width: min(520px, 70vw); border-radius: 999px; background: rgba(255,255,255,.06); box-shadow: inset 0 0 0 1px rgba(255,255,255,.06); }
+  .progress-h .thumb { position: absolute; top: 0; height: 100%; width: 20%; border-radius: 999px; background: linear-gradient(90deg, rgba(79,140,255,.9), rgba(79,140,255,.6)); box-shadow: 0 0 12px rgba(79,140,255,.45); transform: translateX(var(--x, 0px)); }
+  .progress-visible { opacity: 1; }
+
+  /* Rounded corners via wrapper to avoid clipping issues with sticky cells */
+  .sheet-wrap { position: relative; border-radius: 12px; overflow: hidden; box-shadow: var(--shadow); }
+  .sheet-wrap::after { content: ""; position: absolute; inset: 0; border-radius: 12px; border: var(--border); pointer-events: none; }
+
+</style>
+
+  <!-- Supabase JS SDK -->
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+
+
+  <script>
+    // Global fallback: open auth modal even if main JS didn't attach handlers
+    window.__openAuthGlobal = function() {
+      try {
+        var el = document.getElementById('authBackdrop');
+        if (!el) return;
+        el.style.display = 'flex';
+        el.setAttribute('aria-hidden','false');
+        var email = document.getElementById('authEmail');
+        if (email) setTimeout(function(){ email.focus(); }, 0);
+      } catch(e) { /* no-op */ }
+    };
+  </script>
+
+</head>
+<body>
+
+  <!-- Auth Modal -->
+  <div class="modal-backdrop" id="authBackdrop" aria-hidden="true" style="display:none">
+    <div class="modal" role="dialog" aria-modal="true" aria-labelledby="authTitle">
+      <h3 id="authTitle">Вход</h3>
+      <div class="meta">Войдите с вашим e‑mail и паролем (единственный пользователь).</div>
+      <div class="row onecol">
+        <input type="email" id="authEmail" placeholder="E‑mail" />
+      </div>
+      <div class="row onecol">
+        <input type="password" id="authPassword" placeholder="Пароль" />
+        <button class="btn" id="authSignInBtn">Войти</button>
+      </div>
+      <div class="actions">
+        <button class="btn" id="authCloseBtn">Закрыть</button>
+        <button class="btn" id="authSignUpBtn">Зарегистрироваться</button>
+      </div>
+      <div class="meta" id="authError" style="color:#ff9b9b;margin-top:6px;"></div>
+      <div class="meta" style="margin-top:6px;opacity:.8">Совет: проще создать пользователя через Supabase → Auth → Users → <em>Add user</em> (автоподтверждение), а потом войти здесь.</div>
+    </div>
+  </div>
+
+  <header>
+    <div class="hdr">
+      <div class="brand">
+        <div class="logo" aria-hidden="true">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
+            <path d="M5 12h14M12 5v14" stroke="white" stroke-width="2" stroke-linecap="round"/>
+          </svg>
+        </div>
+        <div class="title">
+          <div class="name">Fincell</div>
+          <div class="sub">Управление финансами</div>
+        </div>
+      </div>
+      <div class="toolbar">
+        <span id="authStatus" class="btn" style="pointer-events:none;opacity:.8">Статус…</span>
+        <button id="openAuthBtn" class="btn" onclick="window.__openAuthGlobal && window.__openAuthGlobal()">Войти</button>
+        <button id="addIncome" class="btn">+ Категория дохода</button>
+        <button id="addExpense" class="btn">+ Категория расхода</button>
+        <button id="reset" class="btn danger">Сбросить всё</button>
+      </div>
+    </div>
+  </header>
+
+  <div class="grid-wrap" id="gridWrap">
+    <div id="sheetWrap" class="sheet-wrap">
+    <table id="sheet">
+      <thead>
+        <tr id="monthsHead">
+          <th>Категория</th>
+        </tr>
+      </thead>
+      <tbody id="tbody"></tbody>
+    </table>
+  </div>
+  </div>
+
+  <div class="totals-fixed">
+    <div class="totals-inner">
+      <div class="totals-scroller" id="totalsScroller">
+        <div class="totals-grid" id="totalsGrid"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Индикаторы скролла -->
+  <div class="progress-v" id="vProgress"><div class="thumb"></div></div>
+  <div class="progress-h" id="hProgress"><div class="thumb"></div></div>
+
+  <div class="modal-backdrop" id="modalBackdrop" aria-hidden="true">
+    <div class="modal" role="dialog" aria-modal="true" aria-labelledby="modalTitle">
+      <h3 id="modalTitle">Редактор</h3>
+      <div class="meta" id="modalMeta"></div>
+
+      <div class="row" id="cellRow">
+        <input type="number" step="0.01" id="amountInput" placeholder="Сумма (€)" />
+        <input type="text" id="descInput" placeholder="Описание (необязательно)" />
+        <button class="btn" id="addEntryBtn">Добавить</button>
+      </div>
+      <div class="entry-list" id="entryList"></div>
+
+      <div class="row onecol" id="addCatRow" style="display:none">
+        <input type="text" id="catNameInput" placeholder="Название категории" />
+        <button class="btn" id="saveCatBtn">Сохранить</button>
+      </div>
+
+      <div class="actions">
+        <button class="btn" id="closeModalBtn">Закрыть</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="ctx" id="ctxMenu" role="menu" aria-hidden="true">
+    <div class="item" id="ctxCopyEntries" style="display:none">Копировать записи</div>
+    <div class="item" id="ctxPasteEntries" style="display:none">Вставить записи</div>
+    <div class="item" id="ctxAddSub">+ Подкатегория</div>
+    <div class="item" id="ctxDuplicate">Дублировать</div>
+    <div class="item danger" id="ctxDelete">Удалить</div>
+    <div class="row">
+      <div class="label">Цвет категории</div>
+      <div class="palette" id="ctxPalette"></div>
+    </div>
+  </div>
+
+<script>
+(() => {
+// ===== Supabase config =====
+const SUPABASE_URL = "https://bgmqpojjkkjxobsmnxyl.supabase.co";
+const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImJnbXFwb2pqa2tqeG9ic21ueHlsIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTUyNTkyMjUsImV4cCI6MjA3MDgzNTIyNX0.SkS9_em7sH6Ei5rAzEhDzr7sY6QoEOvIoRFOdTDv_bA";
+const SUPA_TABLE = "fincell_states"; // single JSON state per user/year
+
+
+let supa = null;
+const keysFilled = SUPABASE_URL && !SUPABASE_URL.includes("PASTE_YOUR") && SUPABASE_ANON_KEY && !SUPABASE_ANON_KEY.includes("PASTE_YOUR");
+if (window.supabase && keysFilled) {
+  supa = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+}
+
+// Simple auth UI handling (one user)
+const authBackdrop = document.getElementById("authBackdrop");
+const authEmail = document.getElementById("authEmail");
+const authPassword = document.getElementById("authPassword");
+const authSignInBtn = document.getElementById("authSignInBtn");
+
+const authSignUpBtn = document.getElementById("authSignUpBtn");
+if (authSignUpBtn) {
+  authSignUpBtn.addEventListener("click", async () => {
+    try {
+      authError.textContent = "";
+      const email = (authEmail.value||"").trim();
+      const password = authPassword.value||"";
+      if (!email || !password) { authError.textContent="Введите e-mail и пароль"; return; }
+      if (!supa) { authError.textContent = "Supabase не инициализирован. Проверьте SUPABASE_URL и SUPABASE_ANON_KEY."; return; }
+      const { data, error } = await supa.auth.signUp({ email, password });
+      if (error) { authError.textContent = error.message; return; }
+      // If email confirmations are required and SMTP is configured, user must confirm via email
+      authError.style.color = "#a8f5a2";
+      authError.textContent = "Регистрация отправлена. Если включено подтверждение по e-mail — проверьте почту. Либо создайте/подтвердите пользователя в панели Supabase.";
+    } catch (e) {
+      authError.textContent = "Ошибка регистрации";
+    }
+  });
+}
+
+const authCloseBtn = document.getElementById("authCloseBtn");
+const authError = document.getElementById("authError");
+
+function openAuth() { authBackdrop.style.display = "flex"; authBackdrop.setAttribute("aria-hidden","false"); setTimeout(()=>authEmail.focus(),0); }
+function closeAuth() { authBackdrop.style.display = "none"; authBackdrop.setAttribute("aria-hidden","true"); authError.textContent=""; }
+
+if (authSignInBtn) {
+  authSignInBtn.addEventListener("click", async () => {
+    try {
+      authError.textContent = "";
+      const email = (authEmail.value||"").trim();
+      const password = authPassword.value||"";
+      if (!email || !password) { authError.textContent="Введите e‑mail и пароль"; return; }
+      const { data, error } = await supa.auth.signInWithPassword({ email, password });
+      if (error) { authError.textContent = error.message; return; }
+      closeAuth();
+      await remoteFetchAndApplyState();
+    } catch (e) { authError.textContent = "Ошибка входа"; }
+  });
+}
+if (authCloseBtn) authCloseBtn.addEventListener("click", closeAuth);
+
+// Remote state helpers
+async function remoteFetchAndApplyState() {
+  if (!supa) return;
+  const { data: sessionData } = await supa.auth.getSession();
+  if (!sessionData?.session) { openAuth(); return; }
+
+  const { data, error } = await supa
+    .from(SUPA_TABLE)
+    .select("state")
+    .eq("year", YEAR)
+    .single();
+
+  if (error && error.code !== "PGRST116") { // not found is fine
+    console.warn("Supabase load error:", error);
+    return;
+  }
+  if (data?.state) {
+    try {
+      model = migrate(data.state);
+      // Save local cache too
+      localStorage.setItem(storeKey, JSON.stringify(model));
+      rebuildBody();
+    } catch (e) { console.warn("Apply remote state failed", e); }
+  }
+}
+
+// Fire-and-forget upsert
+async function remoteUpsertState() {
+  try {
+    if (!supa) return;
+    const { data: sessionData } = await supa.auth.getSession();
+    if (!sessionData?.session) return; // not logged in yet
+    const payload = { year: YEAR, state: model };
+    const { error } = await supa
+      .from(SUPA_TABLE)
+      .upsert(payload, { onConflict: "year" }); // unique by user/year via RLS user_id
+    if (error) console.warn("Supabase upsert error:", error);
+  } catch (e) { console.warn("Supabase upsert failed", e); }
+}
+
+  const YEAR = 2025;
+  const MONTHS = ["Янв","Фев","Мар","Апр","Май","Июн","Июл","Авг","Сен","Окт","Ноя","Дек"];
+  const COLORS = ["#4f8cff","#41c77a","#ffb020","#ff6b6b","#b784ff","#e85dff","#22d3ee","#94a3b8","#f472b6","#f59e0b","#10b981","#60a5fa"];
+
+  const storeKey = "fincell_2025_v7";
+  let model = load();
+
+  function migrate(old) {
+    const fixSection = (arr) => arr.map(item => {
+      if (typeof item === "string") return { name: item, color: "#4f8cff", children: [], collapsed: false };
+      return { name: item.name || "Категория", color: item.color || "#4f8cff", children: Array.isArray(item.children) ? item.children : [], collapsed: !!item.collapsed };
+    });
+    if (!old.sections || !old.sections.income || !old.sections.expense) {
+      old.sections = { income: [], expense: [] };
+    } else {
+      old.sections.income = fixSection(old.sections.income);
+      old.sections.expense = fixSection(old.sections.expense);
+    }
+    old.entries = old.entries || {};
+    return old;
+  }
+
+  function load() {
+    try { const raw = localStorage.getItem(storeKey); if (raw) return migrate(JSON.parse(raw)); } catch(e) {}
+    return migrate({ sections: { income: ["Зарплата","Фриланс"], expense: ["Аренда","Еда","Транспорт"] }, entries: {} });
+  }
+  function save() {
+    localStorage.setItem(storeKey, JSON.stringify(model));
+    renderTotalsPanel();
+    syncTotalsLayout();
+    // also sync to Supabase (fire-and-forget)
+    remoteUpsertState();
+  }
+
+  const fmt = new Intl.NumberFormat("ru-RU", { style: "currency", currency: "EUR", maximumFractionDigits: 2 });
+  const formatMoney = (v) => (v || v === 0) ? fmt.format(v) : "";
+  const formatMoneySafe = (v) => fmt.format(v || 0);
+
+  const head = document.getElementById("monthsHead");
+  MONTHS.forEach((m, i) => {
+    const th = document.createElement("th");
+    th.className = "month"; th.dataset.m = i; th.textContent = `${m} ${YEAR}`;
+    head.appendChild(th);
+  });
+
+  const tbody = document.getElementById("tbody");
+
+  // Context menu state
+  const ctxMenu = document.getElementById("ctxMenu");
+  const palette = document.getElementById("ctxPalette");
+  let ctxState = null;
+
+  function buildPalette() {
+    palette.innerHTML = "";
+    COLORS.forEach(c => {
+      const sw = document.createElement("div");
+      sw.className = "sw"; sw.style.background = c;
+      sw.addEventListener("click", (e) => {
+        e.stopPropagation();
+        if (!ctxState) return;
+        const list = model.sections[ctxState.section];
+        if (ctxState.subIndex != null) list[ctxState.index].children[ctxState.subIndex].color = c;
+        else list[ctxState.index].color = c;
+        save(); rebuildBody(); closeCtx();
+      });
+      palette.appendChild(sw);
+    });
+  }
+  buildPalette();
+
+  function openCtx(x, y, state) {
+    ctxState = state;
+    const isCell = state && state.type === "cell";
+
+    // Toggle category-related items
+    const addSub = document.getElementById("ctxAddSub");
+    const dup = document.getElementById("ctxDuplicate");
+    const del = document.getElementById("ctxDelete");
+    const paletteRow = document.querySelector("#ctxMenu .row");
+    const copyIt = document.getElementById("ctxCopyEntries");
+    const pasteIt = document.getElementById("ctxPasteEntries");
+
+    if (isCell) {
+      // Hide category actions & palette
+      addSub.style.display = "none";
+      dup.style.display = "none";
+      del.style.display = "none";
+      if (paletteRow) paletteRow.style.display = "none";
+
+      // Show cell actions conditionally
+      const subId = state.subId != null ? Number(state.subId) : null;
+      const has = (entriesOf(state.section, Number(state.categoryId), Number(state.month), subId) || []).length > 0;
+      copyIt.style.display = has ? "flex" : "none";
+      pasteIt.style.display = (window.__cellClipboard && window.__cellClipboard.length > 0) ? "flex" : "none";
+    } else {
+      // Category context: show relevant, hide cell actions
+      copyIt.style.display = "none";
+      pasteIt.style.display = "none";
+      addSub.style.display = (state && state.subIndex != null) ? "none" : "flex";
+      dup.style.display = "flex";
+      del.style.display = "flex";
+      if (paletteRow) paletteRow.style.display = "block";
+    }
+
+    ctxMenu.style.left = x + "px";
+    ctxMenu.style.top = y + "px";
+    ctxMenu.style.display = "block";
+    ctxMenu.setAttribute("aria-hidden", "false");
+  }
+  function closeCtx() {
+    ctxMenu.style.display = "none";
+    ctxMenu.setAttribute("aria-hidden", "true");
+    ctxState = null;
+  }
+
+  // ====== POPUPS close ======
+  document.addEventListener("keydown", (e) => { if (e.key === "Escape") { closeCtx(); closeModal(); }});
+  document.addEventListener("mousedown", (e) => { const inCtx = ctxMenu.contains(e.target); if (!inCtx) closeCtx(); });
+
+  // Modal refs
+  const modalBackdrop = document.getElementById("modalBackdrop");
+  const modalMeta = document.getElementById("modalMeta");
+  const modalTitle = document.getElementById("modalTitle");
+  const cellRow = document.getElementById("cellRow");
+  const amountInput = document.getElementById("amountInput");
+  const descInput = document.getElementById("descInput");
+  const addEntryBtn = document.getElementById("addEntryBtn");
+  const entryList = document.getElementById("entryList");
+  const addCatRow = document.getElementById("addCatRow");
+  const catNameInput = document.getElementById("catNameInput");
+  const saveCatBtn = document.getElementById("saveCatBtn");
+  const closeModalBtn = document.getElementById("closeModalBtn");
+
+  // === Create new category handlers (injected) ===
+  function onSaveNewCategory() {
+    try {
+      if (!addCatCtx || !addCatCtx.section) { closeModal(); return; }
+      const name = (catNameInput.value || "").trim();
+      if (!name) { catNameInput.focus(); return; }
+      const newCat = { name, color: "#4f8cff", children: [], collapsed: false };
+      if (!model.sections[addCatCtx.section]) model.sections[addCatCtx.section] = [];
+      model.sections[addCatCtx.section].push(newCat);
+      save();
+      rebuildBody();
+      closeModal();
+    } catch (e) {
+      console.error("Create category failed", e);
+      alert("Не удалось создать категорию. Пожалуйста, попробуйте ещё раз.");
+    }
+  }
+  if (saveCatBtn) {
+    saveCatBtn.addEventListener("click", onSaveNewCategory);
+  }
+  if (catNameInput) {
+    catNameInput.addEventListener("keydown", (e) => {
+      if (e.key === "Enter") { e.preventDefault(); onSaveNewCategory(); }
+    });
+  }
+
+
+  function openModal() { modalBackdrop.style.display = "flex"; modalBackdrop.setAttribute("aria-hidden", "false"); setTimeout(() => { (addCatCtx ? catNameInput : amountInput).focus(); }, 0); }
+  function closeModal() { modalBackdrop.style.display = "none"; modalBackdrop.setAttribute("aria-hidden", "true"); modalCtx = null; addCatCtx = null; }
+  modalBackdrop.addEventListener("mousedown", (e) => { if (e.target === modalBackdrop) closeModal(); });
+  closeModalBtn.addEventListener("click", () => closeModal());
+
+  document.getElementById("gridWrap").addEventListener("scroll", () => { closeCtx(); });
+
+  document.getElementById("ctxDuplicate").addEventListener("click", () => {
+    if (!ctxState) return;
+    if (ctxState.subIndex != null) duplicateSub(ctxState.section, ctxState.index, ctxState.subIndex);
+    else duplicateCategory(ctxState.section, ctxState.index);
+    closeCtx();
+  });
+  document.getElementById("ctxDelete").addEventListener("click", () => {
+    if (!ctxState) return;
+    if (ctxState.subIndex != null) deleteSub(ctxState.section, ctxState.index, ctxState.subIndex);
+    else deleteCategory(ctxState.section, ctxState.index);
+    closeCtx();
+  });
+  document.getElementById("ctxAddSub").addEventListener("click", () => {
+    if (!ctxState) return;
+    const name = prompt("Название подкатегории?");
+    if (!name) return;
+    model.sections[ctxState.section][ctxState.index].children.push({ name, color: "#94a3b8" });
+    save(); rebuildBody(); closeCtx();
+  });
+
+  function buildSectionRow(title) {
+    const tr = document.createElement("tr");
+    tr.className = "section-row";
+    const th = document.createElement("th");
+    th.colSpan = 13; th.textContent = title;
+    tr.appendChild(th);
+    return tr;
+  }
+
+  // Category block
+  function buildCategoryBlock(section, cat, idx) {
+    const frag = document.createDocumentFragment();
+
+    const tr = document.createElement("tr");
+    tr.draggable = true; tr.dataset.section = section; tr.dataset.index = idx;
+
+    tr.addEventListener("dragstart", onDragStart);
+    tr.addEventListener("dragover", onDragOver);
+    tr.addEventListener("dragleave", onDragLeave);
+    tr.addEventListener("drop", onDrop);
+
+    const th = document.createElement("th");
+    const wrap = document.createElement("div");
+    wrap.className = "cat-cell";
+
+    const left = document.createElement("div");
+    left.className = "cell-left";
+
+    const handle = document.createElement("div");
+    handle.className = "drag-handle"; handle.textContent = "⋮"; handle.title = "Перетащить";
+
+    const dot = document.createElement("div");
+    dot.className = "color-dot"; dot.style.background = cat.color || "#4f8cff";
+
+    const nameEl = document.createElement("div");
+    nameEl.className = "cat-name"; nameEl.textContent = cat.name; nameEl.title = "Дважды кликните, чтобы переименовать";
+    nameEl.addEventListener("dblclick", () => enableRename(nameEl, section, idx));
+
+    left.appendChild(handle); left.appendChild(dot); left.appendChild(nameEl);
+
+    const spacer = document.createElement("div"); spacer.className = "spacer";
+
+    if (cat.children && cat.children.length > 0) {
+      const collapseBtn = document.createElement("button");
+      collapseBtn.className = "collapse-btn";
+      collapseBtn.textContent = cat.collapsed ? "▼" : "▲";
+      collapseBtn.title = cat.collapsed ? "Развернуть" : "Свернуть";
+      collapseBtn.addEventListener("click", (e) => {
+        e.stopPropagation();
+        cat.collapsed = !cat.collapsed;
+        save(); rebuildBody();
+      });
+      wrap.appendChild(left); wrap.appendChild(spacer); wrap.appendChild(collapseBtn);
+    } else {
+      wrap.appendChild(left);
+    }
+
+    th.appendChild(wrap); tr.appendChild(th);
+
+    th.addEventListener("contextmenu", (e) => { e.preventDefault(); openCtx(e.clientX, e.clientY, { section, index: idx }); });
+
+    for (let m = 0; m < 12; m++) {
+      const td = document.createElement("td");
+      td.className = "cell"; td.dataset.section = section; td.dataset.categoryId = idx; td.dataset.month = m;
+      td.textContent = formatCellTotal(getCategoryAndSubsTotal(section, idx, m));
+      td.addEventListener("click", onCellClick);
+          td.addEventListener("contextmenu", (e) => { e.preventDefault(); e.stopPropagation(); openCtx(e.clientX, e.clientY, { type: "cell", section, categoryId: idx, month: m, tdRef: td }); });
+      tr.appendChild(td);
+    }
+
+    frag.appendChild(tr);
+
+    if (!cat.collapsed && cat.children && cat.children.length) {
+      cat.children.forEach((sub, sidx) => {
+        const trS = document.createElement("tr");
+        trS.className = "sub";
+        trS.draggable = true;
+        trS.dataset.section = section;
+        trS.dataset.parentIndex = idx;
+        trS.dataset.subIndex = sidx;
+
+        trS.addEventListener("dragstart", onSubDragStart);
+        trS.addEventListener("dragover", onSubDragOver);
+        trS.addEventListener("dragleave", onSubDragLeave);
+        trS.addEventListener("drop", onSubDrop);
+
+        const thS = document.createElement("th");
+        const wrapS = document.createElement("div");
+        wrapS.className = "cat-cell";
+        const handleS = document.createElement("div");
+        handleS.className = "drag-handle"; handleS.textContent = "⋮"; handleS.title = "Перетащить подкатегорию";
+        const dotS = document.createElement("div");
+        dotS.className = "color-dot"; dotS.style.background = sub.color || "#94a3b8";
+        const nameS = document.createElement("div");
+        nameS.className = "cat-name"; nameS.textContent = sub.name; nameS.title = "Дважды кликните, чтобы переименовать";
+        nameS.addEventListener("dblclick", () => enableRenameSub(nameS, section, idx, sidx));
+        wrapS.appendChild(handleS); wrapS.appendChild(dotS); wrapS.appendChild(nameS); thS.appendChild(wrapS); trS.appendChild(thS);
+
+        thS.addEventListener("contextmenu", (e) => { e.preventDefault(); openCtx(e.clientX, e.clientY, { section, index: idx, subIndex: sidx }); });
+
+        for (let m = 0; m < 12; m++) {
+          const td = document.createElement("td");
+          td.className = "cell"; td.dataset.section = section; td.dataset.categoryId = idx; td.dataset.subId = sidx; td.dataset.month = m;
+          td.textContent = formatCellTotal(getCellTotal(section, idx, m, sidx));
+          td.addEventListener("click", onCellClick);
+      td.addEventListener("contextmenu", (e) => { e.preventDefault(); e.stopPropagation(); openCtx(e.clientX, e.clientY, { type: "cell", section, categoryId: idx, month: m, tdRef: td }); });
+          trS.appendChild(td);
+        }
+        frag.appendChild(trS);
+      });
+    }
+
+    return frag;
+  }
+
+  function enableRename(el, section, idx) {
+    el.contentEditable = "true"; el.focus();
+    const sel = window.getSelection();
+    if (sel && document.createRange) { const r = document.createRange(); r.selectNodeContents(el); sel.removeAllRanges(); sel.addRange(r); }
+    function finish(commit) {
+      el.contentEditable = "false"; el.removeEventListener("blur", onBlur); el.removeEventListener("keydown", onKey);
+      if (commit) {
+        const v = el.textContent.trim();
+        if (v && v !== model.sections[section][idx].name) { model.sections[section][idx].name = v; save(); } else { el.textContent = model.sections[section][idx].name; }
+      } else { el.textContent = model.sections[section][idx].name; }
+      rebuildBody();
+    }
+    function onBlur() { finish(true); }
+    function onKey(e) { if (e.key === "Enter") { e.preventDefault(); finish(true); } if (e.key === "Escape") { e.preventDefault(); finish(false); } }
+    el.addEventListener("blur", onBlur); el.addEventListener("keydown", onKey);
+  }
+  function enableRenameSub(el, section, idx, sidx) {
+    el.contentEditable = "true"; el.focus();
+    function finish(commit) {
+      el.contentEditable = "false"; el.removeEventListener("blur", onBlur); el.removeEventListener("keydown", onKey);
+      if (commit) {
+        const v = el.textContent.trim();
+        const sub = model.sections[section][idx].children[sidx];
+        if (v && v !== sub.name) { sub.name = v; save(); } else { el.textContent = sub.name; }
+      } else { el.textContent = model.sections[section][idx].children[sidx].name; }
+      rebuildBody();
+    }
+    function onBlur() { finish(true); }
+    function onKey(e) { if (e.key === "Enter") { e.preventDefault(); finish(true); } if (e.key === "Escape") { e.preventDefault(); finish(false); } }
+    el.addEventListener("blur", onBlur); el.addEventListener("keydown", onKey);
+  }
+
+  function rebuildBody() {
+    closeCtx();
+    tbody.innerHTML = "";
+    tbody.appendChild(buildSectionRow("Доходы"));
+    model.sections.income.forEach((cat, i) => { tbody.appendChild(buildCategoryBlock("income", cat, i)); });
+    tbody.appendChild(buildAddRow("income"));
+
+    tbody.appendChild(buildSectionRow("Расходы"));
+    model.sections.expense.forEach((cat, i) => { tbody.appendChild(buildCategoryBlock("expense", cat, i)); });
+    tbody.appendChild(buildAddRow("expense"));
+
+    renderCurrentMonthHighlight();
+    renderTotalsPanel();
+    requestAnimationFrame(() => { syncTotalsLayout(); updateProgressAll(); });
+  }
+
+  function buildAddRow(section) {
+    const tr = document.createElement("tr");
+    const th = document.createElement("th"); th.colSpan = 13;
+    const btn = document.createElement("button"); btn.className = "btn";
+    btn.textContent = section === "income" ? "+ Добавить категорию дохода" : "+ Добавить категорию расхода";
+    btn.addEventListener("click", () => { closeCtx(); openAddCategoryModal(section); });
+    th.appendChild(btn); tr.appendChild(th); return tr;
+  }
+
+  // Keys
+  function keyOf(section, catId, month, subId=null) {
+    return subId==null ? `${YEAR}:${month}:${section}:${catId}` : `${YEAR}:${month}:${section}:${catId}:${subId}`;
+  }
+  function entriesOf(section, catId, month, subId=null) { return model.entries[keyOf(section, catId, month, subId)] || []; }
+  function getCellTotal(section, catId, month, subId=null) { return entriesOf(section, catId, month, subId).reduce((s, e) => s + (Number(e.amount) || 0), 0); }
+  function getCategoryAndSubsTotal(section, catId, month) {
+    let t = getCellTotal(section, catId, month, null);
+    const kids = model.sections[section][catId].children || [];
+    kids.forEach((_, sidx) => { t += getCellTotal(section, catId, month, sidx); });
+    return t;
+  }
+  function formatCellTotal(v) { return v ? formatMoney(v) : ""; }
+
+  // ===== Cell copy/paste buffer =====
+  window.__cellClipboard = null; // array of entries [{amount, desc, ts}, ...]
+
+  function deepCloneEntries(arr) {
+    return JSON.parse(JSON.stringify(arr || []));
+  }
+
+  function copyEntriesFromState(st) {
+    const subId = st.subId != null ? Number(st.subId) : null;
+    const list = entriesOf(st.section, Number(st.categoryId), Number(st.month), subId);
+    window.__cellClipboard = deepCloneEntries(list);
+  }
+
+  function pasteEntriesToState(st) {
+    if (!window.__cellClipboard || !window.__cellClipboard.length) return;
+    const subId = st.subId != null ? Number(st.subId) : null;
+    const k = keyOf(st.section, Number(st.categoryId), Number(st.month), subId);
+    // overwrite
+    model.entries[k] = window.__cellClipboard.map(e => ({ amount: Number(e.amount)||0, desc: e.desc||"", ts: Date.now() }));
+    save();
+    // update visible cells
+    if (subId != null) {
+      // update sub cell
+      st.tdRef.textContent = formatCellTotal(getCellTotal(st.section, Number(st.categoryId), Number(st.month), subId));
+      // update parent aggregate
+      const parentCell = document.querySelector(`td.cell[data-section="${st.section}"][data-category-id="${Number(st.categoryId)}"][data-month="${Number(st.month)}"]:not([data-sub-id])`);
+      if (parentCell) parentCell.textContent = formatCellTotal(getCategoryAndSubsTotal(st.section, Number(st.categoryId), Number(st.month)));
+    } else {
+      // parent cell edited
+      st.tdRef.textContent = formatCellTotal(getCategoryAndSubsTotal(st.section, Number(st.categoryId), Number(st.month)));
+    }
+    renderTotalsPanel();
+  }
+
+  document.getElementById("ctxCopyEntries").addEventListener("click", () => {
+    if (!ctxState || ctxState.type !== "cell") return;
+    copyEntriesFromState(ctxState);
+    closeCtx();
+  });
+  document.getElementById("ctxPasteEntries").addEventListener("click", () => {
+    if (!ctxState || ctxState.type !== "cell") return;
+    pasteEntriesToState(ctxState);
+    closeCtx();
+  });
+
+
+  let modalCtx = null;
+  let addCatCtx = null;
+
+  function onCellClick(e) {
+    closeCtx();
+    const td = e.currentTarget;
+    modalCtx = { section: td.dataset.section, categoryId: Number(td.dataset.categoryId), month: Number(td.dataset.month), tdRef: td };
+    if (td.dataset.subId !== undefined) modalCtx.subId = Number(td.dataset.subId);
+    addCatCtx = null;
+    modalTitle.textContent = "Редактор ячейки";
+    const cat = model.sections[modalCtx.section][modalCtx.categoryId];
+    const title = modalCtx.subId!=null ? `${cat.name} › ${cat.children[modalCtx.subId].name}` : cat.name;
+    modalMeta.textContent = `${title} — ${MONTHS[modalCtx.month]} ${YEAR}`;
+    amountInput.value = ""; descInput.value = ""; entryList.innerHTML = "";
+    cellRow.style.display = ""; entryList.style.display = ""; addCatRow.style.display = "none";
+    renderEntryList(); openModal();
+  }
+
+  function openAddCategoryModal(section) {
+    // defensive init
+    addCatCtx = { section };
+
+    modalCtx = null; addCatCtx = { section };
+    modalTitle.textContent = "Новая категория";
+    modalMeta.textContent = section === "income" ? "Добавить категорию дохода" : "Добавить категорию расхода";
+    catNameInput.value = "";
+    cellRow.style.display = "none"; entryList.style.display = "none"; addCatRow.style.display = "";
+    openModal();
+  }
+
+  function renderEntryList() {
+    entryList.innerHTML = "";
+    if (!modalCtx) return;
+    const key = keyOf(modalCtx.section, modalCtx.categoryId, modalCtx.month, modalCtx.subId ?? null);
+    const arr = model.entries[key] || [];
+
+    if (!arr.length) {
+      const empty = document.createElement("div");
+      empty.className = "no-records";
+      empty.textContent = "Записей пока нет.";
+      entryList.appendChild(empty);
+      return;
+    }
+
+    arr.forEach((en, i) => {
+      const row = document.createElement("div");
+      row.className = "entry";
+      row.draggable = true;
+      row.dataset.index = i;
+
+      const drag = document.createElement("div");
+      drag.className = "drag";
+      drag.textContent = "⋮";
+      row.appendChild(drag);
+
+      const amt = document.createElement("input");
+      amt.type="number"; amt.step="0.01"; amt.value= String(en.amount ?? ""); amt.title="Сумма (€)";
+      amt.addEventListener("input", () => {
+        en.amount = Number(amt.value) || 0;
+        save();
+        if (modalCtx.subId != null) {
+          modalCtx.tdRef.textContent = formatCellTotal(getCellTotal(modalCtx.section, modalCtx.categoryId, modalCtx.month, modalCtx.subId));
+          const parentCell = document.querySelector(`td.cell[data-section="${modalCtx.section}"][data-category-id="${modalCtx.categoryId}"][data-month="${modalCtx.month}"]:not([data-sub-id])`);
+          if (parentCell) parentCell.textContent = formatCellTotal(getCategoryAndSubsTotal(modalCtx.section, modalCtx.categoryId, modalCtx.month));
+        } else {
+          modalCtx.tdRef.textContent = formatCellTotal(getCategoryAndSubsTotal(modalCtx.section, modalCtx.categoryId, modalCtx.month));
+        }
+        renderTotalsPanel();
+      });
+      amt.addEventListener("keydown", e => { if (e.key === "Enter") { e.preventDefault(); amt.blur(); }});
+
+      const desc = document.createElement("input");
+      desc.type="text"; desc.value= en.desc || ""; desc.title="Описание";
+      desc.addEventListener("input", () => { en.desc = desc.value; save(); });
+      desc.addEventListener("keydown", e => { if (e.key === "Enter") { e.preventDefault(); desc.blur(); }});
+
+      const delBtn = document.createElement("button");
+      delBtn.className = "delete";
+      delBtn.textContent = "Удалить";
+      delBtn.addEventListener("click", () => {
+        const list = model.entries[key] || [];
+        list.splice(i, 1);
+        if (!list.length) delete model.entries[key]; else model.entries[key] = list;
+        save();
+        if (modalCtx.subId != null) {
+          modalCtx.tdRef.textContent = formatCellTotal(getCellTotal(modalCtx.section, modalCtx.categoryId, modalCtx.month, modalCtx.subId));
+          const parentCell = document.querySelector(`td.cell[data-section="${modalCtx.section}"][data-category-id="${modalCtx.categoryId}"][data-month="${modalCtx.month}"]:not([data-sub-id])`);
+          if (parentCell) parentCell.textContent = formatCellTotal(getCategoryAndSubsTotal(modalCtx.section, modalCtx.categoryId, modalCtx.month));
+        } else {
+          modalCtx.tdRef.textContent = formatCellTotal(getCategoryAndSubsTotal(modalCtx.section, modalCtx.categoryId, modalCtx.month));
+        }
+        renderEntryList();
+        renderTotalsPanel();
+      });
+
+      row.appendChild(amt);
+      row.appendChild(desc);
+      row.appendChild(delBtn);
+
+      row.addEventListener("dragstart", (e) => {
+        e.dataTransfer.effectAllowed = "move";
+        e.dataTransfer.setData("text/plain", String(i));
+      });
+      row.addEventListener("dragover", (e) => { e.preventDefault(); row.classList.add("drag-over"); });
+      row.addEventListener("dragleave", () => row.classList.remove("drag-over"));
+      row.addEventListener("drop", (e) => {
+        e.preventDefault(); row.classList.remove("drag-over");
+        const from = Number(e.dataTransfer.getData("text/plain"));
+        const to = Number(row.dataset.index);
+        if (isNaN(from) || isNaN(to) || from === to) return;
+        const list = model.entries[key] || [];
+        const [moved] = list.splice(from, 1);
+        list.splice(to, 0, moved);
+        model.entries[key] = list;
+        save();
+        renderEntryList();
+      });
+
+      entryList.appendChild(row);
+    });
+  }
+
+  function addEntry() {
+    if (!modalCtx) return;
+    const amt = Number(amountInput.value);
+    const desc = descInput.value.trim();
+    if (!amt || isNaN(amt)) { amountInput.focus(); return; }
+    const key = keyOf(modalCtx.section, modalCtx.categoryId, modalCtx.month, modalCtx.subId ?? null);
+    if (!model.entries[key]) model.entries[key] = [];
+    model.entries[key].push({ amount: amt, desc, ts: Date.now() });
+    save();
+    if (modalCtx.subId != null) {
+      modalCtx.tdRef.textContent = formatCellTotal(getCellTotal(modalCtx.section, modalCtx.categoryId, modalCtx.month, modalCtx.subId));
+      const parentCell = document.querySelector(`td.cell[data-section="${modalCtx.section}"][data-category-id="${modalCtx.categoryId}"][data-month="${modalCtx.month}"]:not([data-sub-id])`);
+      if (parentCell) parentCell.textContent = formatCellTotal(getCategoryAndSubsTotal(modalCtx.section, modalCtx.categoryId, modalCtx.month));
+    } else {
+      modalCtx.tdRef.textContent = formatCellTotal(getCategoryAndSubsTotal(modalCtx.section, modalCtx.categoryId, modalCtx.month));
+    }
+    amountInput.value = ""; descInput.value = "";
+    renderEntryList();
+    renderTotalsPanel();
+  }
+  addEntryBtn.addEventListener("click", addEntry);
+  amountInput.addEventListener("keydown", e => { if (e.key === "Enter") { e.preventDefault(); addEntry(); }});
+  descInput.addEventListener("keydown", e => { if (e.key === "Enter") { e.preventDefault(); addEntry(); }});
+
+  // Totals
+  const totalsGrid = document.getElementById("totalsGrid");
+  function renderTotalsPanel() {
+    totalsGrid.innerHTML = "";
+    addTgCell("Показатель", true);
+    for (let m = 0; m < 12; m++) addTgCell(`${MONTHS[m]} ${YEAR}`, true, m);
+    addTgCell("ИТОГО", true, null, "tg-annual");
+
+    addTgRow("Доходы", m => sumSectionMonthAgg("income", m), false);
+    addTgRow("Расходы", m => sumSectionMonthAgg("expense", m), false);
+    addTgRow("Баланс", m => sumSectionMonthAgg("income", m) - sumSectionMonthAgg("expense", m), true);
+
+    applyCurrentMonthHighlightTotals();
+  }
+  function addTgCell(text, head=false, m=null, extra="") {
+    const d = document.createElement("div"); d.className = "tg-cell " + (head ? "tg-head " : "") + (extra||"");
+    if (m !== null) d.dataset.m = m;
+    d.textContent = text; totalsGrid.appendChild(d);
+  }
+  function addTgRow(label, monthGetter, colorize=false) {
+    addTgCell(label, false);
+    let annual = 0;
+    for (let m = 0; m < 12; m++) {
+      const v = monthGetter(m); annual += v;
+      const cls = colorize ? (v >= 0 ? "tg-good" : "tg-bad") : "";
+      addTgCell(formatMoneySafe(v), false, m, cls);
+    }
+    const clsAnnual = colorize ? (annual >= 0 ? "tg-good tg-annual" : "tg-bad tg-annual") : "tg-annual";
+    addTgCell(formatMoneySafe(annual), false, null, clsAnnual);
+  }
+  function sumSectionMonthAgg(section, month) {
+    return model.sections[section].reduce((s, cat, i) => s + getCategoryAndSubsTotal(section, i, month), 0);
+  }
+
+  function renderCurrentMonthHighlight() {
+    const now = new Date(); const cm = now.getFullYear() === YEAR ? now.getMonth() : null;
+    document.querySelectorAll(".current-month").forEach(el => el.classList.remove("current-month"));
+    if (cm === null) return;
+    document.querySelectorAll('thead th.month').forEach(th => { if (Number(th.dataset.m) === cm) th.classList.add("current-month"); });
+    document.querySelectorAll('td.cell').forEach(td => { if (Number(td.dataset.month) === cm) td.classList.add("current-month"); });
+    applyCurrentMonthHighlightTotals();
+  }
+  function applyCurrentMonthHighlightTotals() {
+    const now = new Date(); const cm = now.getFullYear() === YEAR ? now.getMonth() : null;
+    if (cm === null) return;
+    totalsGrid.querySelectorAll(".tg-cell").forEach(cell => { if (cell.dataset.m !== undefined && Number(cell.dataset.m) === cm) cell.classList.add("current-month"); });
+  }
+
+  // Drag & drop categories (top-level only)
+  let dragSrcIndex = null; let dragSection = null;
+  function onDragStart(e) {
+    const tr = e.currentTarget; dragSrcIndex = Number(tr.dataset.index); dragSection = tr.dataset.section;
+    e.dataTransfer.effectAllowed = "move"; e.dataTransfer.setData("text/plain", JSON.stringify({ dragSrcIndex, dragSection }));
+  }
+  function onDragOver(e) { e.preventDefault(); const tr = e.currentTarget; if (tr.dataset.section !== dragSection) return; tr.classList.add("drag-over"); e.dataTransfer.dropEffect = "move"; }
+  function onDragLeave(e) { e.currentTarget.classList.remove("drag-over"); }
+  function onDrop(e) {
+    e.preventDefault(); const tr = e.currentTarget; tr.classList.remove("drag-over");
+    const data = JSON.parse(e.dataTransfer.getData("text/plain") || "{}"); if (tr.dataset.section !== data.dragSection) return;
+    const from = Number(data.dragSrcIndex); const to = Number(tr.dataset.index);
+    if (isNaN(from) || isNaN(to) || from === to) return;
+    const arr = model.sections[dragSection]; const [moved] = arr.splice(from, 1); arr.splice(to, 0, moved);
+    remapEntriesForSectionReorder(dragSection, from, to); save(); rebuildBody();
+  }
+  function remapEntriesForSectionReorder(section, from, to) {
+    const newEntries = {};
+    const count = model.sections[section].length;
+    const map = buildReindexMap(count, from, to);
+    Object.keys(model.entries).forEach(k => {
+      const parts = k.split(":"); // YEAR:month:section:catId[:subId]
+      const [year, month, sec, catIdStr, subIdStr] = parts;
+      if (sec !== section) { newEntries[k] = model.entries[k]; return; }
+      const catId = Number(catIdStr);
+      const newIdx = map[catId];
+      const newKey = subIdStr === undefined ? [year, month, sec, String(newIdx)].join(":") : [year, month, sec, String(newIdx), subIdStr].join(":");
+      newEntries[newKey] = model.entries[k];
+    });
+    model.entries = newEntries;
+  }
+  function buildReindexMap(count, from, to) { const order = Array.from({length: count}, (_, i) => i); const [m] = order.splice(from, 1); order.splice(to, 0, m); const map = {}; order.forEach((oldIdx, newIdx) => { map[oldIdx] = newIdx; }); return map; }
+
+  // Drag & drop SUBCATEGORIES (within same parent)
+  let subDrag = null;
+  function onSubDragStart(e) {
+    const tr = e.currentTarget;
+    subDrag = { section: tr.dataset.section, parentIndex: Number(tr.dataset.parentIndex), fromSub: Number(tr.dataset.subIndex) };
+    e.dataTransfer.effectAllowed = "move";
+    e.dataTransfer.setData("text/plain", JSON.stringify(subDrag));
+  }
+  function onSubDragOver(e) {
+    e.preventDefault();
+    const tr = e.currentTarget;
+    const overParent = Number(tr.dataset.parentIndex);
+    const overSection = tr.dataset.section;
+    if (!subDrag || overParent !== subDrag.parentIndex || overSection !== subDrag.section) return;
+    tr.classList.add("drag-over");
+    e.dataTransfer.dropEffect = "move";
+  }
+  function onSubDragLeave(e) {
+    e.currentTarget.classList.remove("drag-over");
+  }
+  function onSubDrop(e) {
+    e.preventDefault();
+    const tr = e.currentTarget;
+    tr.classList.remove("drag-over");
+    if (!subDrag) return;
+    const toSub = Number(tr.dataset.subIndex);
+    const parentIndex = Number(tr.dataset.parentIndex);
+    const section = tr.dataset.section;
+    if (isNaN(toSub) || isNaN(subDrag.fromSub) || toSub === subDrag.fromSub) { subDrag = null; return; }
+    if (parentIndex !== subDrag.parentIndex || section !== subDrag.section) { subDrag = null; return; }
+
+    const kids = model.sections[section][parentIndex].children;
+    const [moved] = kids.splice(subDrag.fromSub, 1);
+    kids.splice(toSub, 0, moved);
+    remapEntriesForSubReorder(section, parentIndex, subDrag.fromSub, toSub);
+    subDrag = null;
+    save(); rebuildBody();
+  }
+  function remapEntriesForSubReorder(section, parentIndex, fromSub, toSub) {
+    const kidsCount = (model.sections[section][parentIndex].children || []).length;
+    const map = buildReindexMap(kidsCount, fromSub, toSub);
+    const newEntries = {};
+    Object.keys(model.entries).forEach(k => {
+      const parts = k.split(":"); // YEAR:month:section:catId[:subId]
+      const [year, month, sec, catIdStr, subIdStr] = parts;
+      if (sec !== section) { newEntries[k] = model.entries[k]; return; }
+      const catId = Number(catIdStr);
+      if (catId !== parentIndex) { newEntries[k] = model.entries[k]; return; }
+      if (subIdStr === undefined) { newEntries[k] = model.entries[k]; return; }
+      const subId = Number(subIdStr);
+      const newSub = map[subId];
+      const newKey = [year, month, sec, String(catId), String(newSub)].join(":");
+      newEntries[newKey] = model.entries[k];
+    });
+    model.entries = newEntries;
+  }
+
+  // Duplicate / Delete
+  function duplicateCategory(section, idx) {
+    const cat = model.sections[section][idx];
+    const insertAt = idx + 1;
+    const deep = JSON.parse(JSON.stringify(cat));
+    deep.name = cat.name + " (копия)";
+    model.sections[section].splice(insertAt, 0, deep);
+    shiftEntriesForInsert(section, insertAt);
+    for (let m = 0; m < 12; m++) {
+      const srcKey = keyOf(section, idx, m, null);
+      const dstKey = keyOf(section, insertAt, m, null);
+      if (model.entries[srcKey]) model.entries[dstKey] = JSON.parse(JSON.stringify(model.entries[srcKey]));
+      const kids = cat.children || [];
+      kids.forEach((_, sidx) => {
+        const srcK = keyOf(section, idx, m, sidx);
+        const dstK = keyOf(section, insertAt, m, sidx);
+        if (model.entries[srcK]) model.entries[dstK] = JSON.parse(JSON.stringify(model.entries[srcK]));
+      });
+    }
+    save(); rebuildBody();
+  }
+  function duplicateSub(section, idx, sidx) {
+    const kids = model.sections[section][idx].children;
+    const insertAt = sidx + 1;
+    const deep = JSON.parse(JSON.stringify(kids[sidx]));
+    deep.name = kids[sidx].name + " (копия)";
+    kids.splice(insertAt, 0, deep);
+    shiftSubEntriesForInsert(section, idx, insertAt);
+    for (let m = 0; m < 12; m++) {
+      const srcKey = keyOf(section, idx, m, sidx);
+      const dstKey = keyOf(section, idx, m, insertAt);
+      if (model.entries[srcKey]) model.entries[dstKey] = JSON.parse(JSON.stringify(model.entries[srcKey]));
+    }
+    save(); rebuildBody();
+  }
+  function deleteCategory(section, idx) {
+    if (!confirm("Удалить категорию и все её записи (включая подкатегории)?")) return;
+    model.sections[section].splice(idx, 1);
+    const newEntries = {};
+    Object.keys(model.entries).forEach(k => {
+      const [year, month, sec, catIdStr] = k.split(":");
+      if (sec !== section) { newEntries[k] = model.entries[k]; return; }
+      const id = Number(catIdStr);
+      if (id === idx) return;
+      const newId = id > idx ? id - 1 : id;
+      const parts = k.split(":");
+      parts[3] = String(newId);
+      const newKey = parts.join(":");
+      newEntries[newKey] = (newEntries[newKey] || []).concat(model.entries[k] || []);
+    });
+    model.entries = newEntries; save(); rebuildBody();
+  }
+  function deleteSub(section, idx, sidx) {
+    if (!confirm("Удалить подкатегорию и её записи?")) return;
+    const kids = model.sections[section][idx].children;
+    kids.splice(sidx, 1);
+    const newEntries = {};
+    Object.keys(model.entries).forEach(k => {
+      const parts = k.split(":"); // YEAR:month:section:catId[:subId]
+      const [year, month, sec, catIdStr, subIdStr] = parts;
+      if (sec !== section) { newEntries[k] = model.entries[k]; return; }
+      const cid = Number(catIdStr);
+      if (cid !== idx) { newEntries[k] = model.entries[k]; return; }
+      if (subIdStr === undefined) { newEntries[k] = model.entries[k]; return; }
+      const sid = Number(subIdStr);
+      if (sid === sidx) return;
+      const newSid = sid > sidx ? sid - 1 : sid;
+      const newKey = [year, month, sec, String(cid), String(newSid)].join(":");
+      newEntries[newKey] = (newEntries[newKey] || []).concat(model.entries[k] || []);
+    });
+    model.entries = newEntries; save(); rebuildBody();
+  }
+
+  function shiftEntriesForInsert(section, insertAt) {
+    const keys = Object.keys(model.entries);
+    const moved = {};
+    keys.forEach(k => {
+      const parts = k.split(":");
+      const [year, month, sec, catIdStr] = parts;
+      if (sec !== section) return;
+      const id = Number(catIdStr);
+      if (id >= insertAt) {
+        parts[3] = String(id + 1);
+        const newKey = parts.join(":");
+        moved[newKey] = model.entries[k];
+        delete model.entries[k];
+      }
+    });
+    Object.assign(model.entries, moved);
+  }
+  function shiftSubEntriesForInsert(section, idx, insertAt) {
+    const keys = Object.keys(model.entries);
+    const moved = {};
+    keys.forEach(k => {
+      const parts = k.split(":");
+      const [year, month, sec, catIdStr, subIdStr] = parts;
+      if (sec !== section) return;
+      if (Number(catIdStr) !== idx) return;
+      if (subIdStr === undefined) return;
+      const sid = Number(subIdStr);
+      if (sid >= insertAt) {
+        parts[4] = String(sid + 1);
+        const newKey = parts.join(":");
+        moved[newKey] = model.entries[k];
+        delete model.entries[k];
+      }
+    });
+    Object.assign(model.entries, moved);
+  }
+
+  // Toolbar
+  document.getElementById("addIncome").addEventListener("click", () => { closeCtx(); openAddCategoryModal("income"); });
+  document.getElementById("addExpense").addEventListener("click", () => { closeCtx(); openAddCategoryModal("expense"); });
+  document.getElementById("reset").addEventListener("click", () => { closeCtx(); if (!confirm("Сбросить всё данные?")) return; localStorage.removeItem(storeKey); model = load(); rebuildBody(); });
+
+  // Totals layout sync
+  const gridWrap = document.getElementById("gridWrap");
+  const totalsScroller = document.getElementById("totalsScroller");
+  function syncTotalsLayout() {
+    const ths = Array.from(document.querySelectorAll("#monthsHead th"));
+    if (!ths.length) return;
+    const widths = ths.map(th => Math.round(th.getBoundingClientRect().width));
+    const cols = widths.map(w => `${w}px`).join(" ") + " 140px";
+    const tg = document.getElementById("totalsGrid");
+    tg.style.gridTemplateColumns = cols;
+    const tableWidth = widths.reduce((a,b)=>a+b, 0) + 140;
+    tg.style.width = tableWidth + "px";
+    totalsScroller.scrollLeft = gridWrap.scrollLeft;
+  }
+  gridWrap.addEventListener("scroll", () => { totalsScroller.scrollLeft = gridWrap.scrollLeft; });
+  const ro = new ResizeObserver(() => { syncTotalsLayout(); });
+  ro.observe(document.getElementById("sheet"));
+  window.addEventListener("resize", syncTotalsLayout);
+  window.addEventListener("load", () => { syncTotalsLayout(); });
+
+  // ===== Индикаторы скролла =====
+  const vBar = document.getElementById("vProgress");
+  const hBar = document.getElementById("hProgress");
+  let vFade = null, hFade = null;
+
+  function showV() { vBar.classList.add("progress-visible"); clearTimeout(vFade); vFade = setTimeout(()=>vBar.classList.remove("progress-visible"), 700); }
+  function showH() { hBar.classList.add("progress-visible"); clearTimeout(hFade); hFade = setTimeout(()=>hBar.classList.remove("progress-visible"), 700); }
+
+  function updateV() {
+    const el = gridWrap; // вертикальная прокрутка в основном тут
+    const track = vBar;
+    const thumb = vBar.querySelector('.thumb');
+    const maxScroll = el.scrollHeight - el.clientHeight;
+    if (maxScroll <= 0) { track.style.display = "none"; return; }
+    track.style.display = "block";
+    const frac = el.clientHeight / el.scrollHeight;
+    const trackLen = track.clientHeight;
+    const thumbLen = Math.max(24, Math.min(trackLen, Math.round(trackLen * frac)));
+    const y = Math.round(((el.scrollTop || 0) / maxScroll) * (trackLen - thumbLen));
+    thumb.style.height = thumbLen + "px";
+    thumb.style.setProperty("--y", y + "px");
+  }
+  function updateH() {
+    const el = gridWrap; // горизонтальная прокрутка
+    const track = hBar;
+    const thumb = hBar.querySelector('.thumb');
+    const maxScroll = el.scrollWidth - el.clientWidth;
+    if (maxScroll <= 0) { track.style.display = "none"; return; }
+    track.style.display = "block";
+    const frac = el.clientWidth / el.scrollWidth;
+    const trackLen = track.clientWidth;
+    const thumbLen = Math.max(24, Math.min(trackLen, Math.round(trackLen * frac)));
+    const x = Math.round(((el.scrollLeft || 0) / maxScroll) * (trackLen - thumbLen));
+    thumb.style.width = thumbLen + "px";
+    thumb.style.setProperty("--x", x + "px");
+  }
+  function updateProgressAll() { updateV(); updateH(); }
+
+  gridWrap.addEventListener("scroll", () => { updateV(); updateH(); showV(); showH(); });
+  window.addEventListener("resize", () => { updateProgressAll(); });
+  window.addEventListener("load", () => { updateProgressAll(); });
+
+  // Build
+  rebuildBody();
+  renderCurrentMonthHighlight();
+  renderTotalsPanel();
+  updateProgressAll();
+
+  // After boot: try to fetch remote state (will prompt auth if needed)
+  if (supa) { remoteFetchAndApplyState(); }
+
+  // Auth status indicator
+  const authStatus = document.getElementById("authStatus");
+  async function refreshAuthStatus() {
+    if (!authStatus) return;
+    if (!supa) { authStatus.textContent = "Offline"; return; }
+    const { data } = await supa.auth.getSession();
+    authStatus.textContent = data?.session ? "Signed in" : "Signed out";
+  }
+  if (supa) {
+    supa.auth.onAuthStateChange(() => { refreshAuthStatus(); });
+  }
+  refreshAuthStatus();
+
+
+})();
+</script>
+
+  <script>
+    document.addEventListener('keydown', function(e){
+      const mac = navigator.platform.toUpperCase().indexOf('MAC')>=0;
+      if ((mac && e.metaKey && e.key.toLowerCase()==='l') || (!mac && e.ctrlKey && e.key.toLowerCase()==='l')) {
+        if (window.__openAuthGlobal) window.__openAuthGlobal();
+        e.preventDefault();
+      }
+    });
+  </script>
+
+</body>
+</html>
