@@ -126,56 +126,47 @@
   .sheet-wrap::after { content: ""; position: absolute; inset: 0; border-radius: 12px; border: var(--border); pointer-events: none; }
 
 </style>
-
-  <!-- Supabase JS SDK -->
-  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-
-
-  <script>
-    window.__openAuthGlobal = function() {
-      try {
-        var el = document.getElementById('authBackdrop');
-        if (!el) return;
-        el.style.display = 'flex';
-        el.setAttribute('aria-hidden','false');
-        var email = document.getElementById('authEmail');
-        if (email) setTimeout(function(){ email.focus(); }, 0);
-      } catch(e) {}
-    };
-    document.addEventListener('keydown', function(e){
-      const mac = navigator.platform.toUpperCase().indexOf('MAC')>=0;
-      if ((mac && e.metaKey && e.key.toLowerCase()==='l') || (!mac && e.ctrlKey && e.key.toLowerCase()==='l')) {
-        if (window.__openAuthGlobal) window.__openAuthGlobal();
-        e.preventDefault();
-      }
-    });
-  </script>
-
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2" defer></script>
 </head>
 <body>
 
-  <!-- Auth Modal -->
   <div class="modal-backdrop" id="authBackdrop" aria-hidden="true" style="display:none">
     <div class="modal" role="dialog" aria-modal="true" aria-labelledby="authTitle">
       <h3 id="authTitle">Вход</h3>
-      <div class="meta">Войдите с вашим e-mail и паролем (единственный пользователь).</div>
-      <div class="row onecol">
-        <input type="email" id="authEmail" placeholder="E-mail" />
-      </div>
+      <div class="meta">Войдите с вашим e-mail и паролем</div>
+      <div class="row onecol"><input type="email" id="authEmail" placeholder="E-mail" /></div>
       <div class="row onecol">
         <input type="password" id="authPassword" placeholder="Пароль" />
         <button class="btn" id="authSignInBtn">Войти</button>
       </div>
       <div class="actions">
         <button class="btn" id="authCloseBtn">Закрыть</button>
-        <button class="btn" id="authSignUpBtn">Зарегистрироваться</button>
       </div>
       <div class="meta" id="authError" style="color:#ff9b9b;margin-top:6px;"></div>
-      <div class="meta" style="margin-top:6px;opacity:.8">Совет: проще создать пользователя через Supabase → Auth → Users → <em>Add user</em> (автоподтверждение), а потом войти здесь.</div>
     </div>
   </div>
 
-  <header>
+  
+<style>
+  .dbg-bar{position:sticky;top:0;z-index:999;background:#1a1f2b;border-bottom:1px solid #2a3242;padding:8px 12px;font-size:12px;display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+  .pill{padding:4px 8px;border:1px solid #3a4256;border-radius:999px;background:#0f131a}
+  .pill.ok{border-color:#2a7b4b}
+  .pill.err{border-color:#7b2d2d}
+  #dbg-lasterr{max-width:50vw;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;opacity:.9}
+</style>
+<div class="dbg-bar">
+  <span class="pill" id="dbg-js">JS?</span>
+  <span class="pill" id="dbg-dom">DOM?</span>
+  <span class="pill" id="dbg-sdk">SDK?</span>
+  <span class="pill" id="dbg-supa">Client?</span>
+  <span class="pill" id="dbg-auth">Auth?</span>
+  <span class="pill" id="dbg-db">DB?</span>
+  <button class="btn" id="dbgOpen">Тест: открыть модалку</button>
+  <button class="btn" id="dbgDiag">Тест: диагностика</button>
+  <span id="dbg-lasterr" class="pill">Ошибок нет</span>
+</div>
+
+<header>
     <div class="hdr">
       <div class="brand">
         <div class="logo" aria-hidden="true">
@@ -190,9 +181,8 @@
       </div>
       <div class="toolbar">
         <span id="authStatus" class="btn" style="pointer-events:none;opacity:.8">Статус…</span>
+        <button id="openAuthBtn" class="btn">Войти</button>
         <button id="syncNowBtn" class="btn">Синхронизировать</button>
-        <button id="openAuthBtn" class="btn" onclick="window.__openAuthGlobal && window.__openAuthGlobal()">Войти</button>
-        <button id="diagBtn" class="btn">Диагностика</button>
         <button id="addIncome" class="btn">+ Категория дохода</button>
         <button id="addExpense" class="btn">+ Категория расхода</button>
         <button id="reset" class="btn danger">Сбросить всё</button>
@@ -263,144 +253,95 @@
 <script>
 (() => {
 
-// ===== Supabase config & helpers =====
-const SUPABASE_URL = "https://bgmqpojjkkjxobsmnxyl.supabase.co";
-const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImJnbXFwb2pqa2tqeG9ic21ueHlsIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTUyNTkyMjUsImV4cCI6MjA3MDgzNTIyNX0.SkS9_em7sH6Ei5rAzEhDzr7sY6QoEOvIoRFOdTDv_bA";
-const SUPA_TABLE = "fincell_states";
+// ===== SAFE DEBUG AUTH / SUPABASE LAYER =====
+(function(){
+  const VERSION = "SAFE_DEBUG_2025-08-15";
+  const SUPABASE_URL = "https://bgmqpojjkkjxobsmnxyl.supabase.co";
+  const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImJnbXFwb2pqa2tqeG9ic21ueHlsIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTUyNTkyMjUsImV4cCI6MjA3MDgzNTIyNX0.SkS9_em7sH6Ei5rAzEhDzr7sY6QoEOvIoRFOdTDv_bA";
+  const SUPA_TABLE = "fincell_states";
 
-let supa = null;
-const keysFilled = SUPABASE_URL && SUPABASE_ANON_KEY;
-if (window.supabase && keysFilled) {
-  supa = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
-}
+  const $ = (id)=>document.getElementById(id);
+  const set = (id, ok, txt)=>{ const el=$(id); if(!el) return; el.classList.remove('ok','err'); el.classList.add(ok?'ok':'err'); if(txt) el.textContent=txt; };
+  const logErr = (msg)=>{ const e=$('dbg-lasterr'); if(e){ e.textContent = String(msg); e.classList.add('err'); }};
 
-// Auth elements
-const authBackdrop = document.getElementById("authBackdrop");
-const authEmail = document.getElementById("authEmail");
-const authPassword = document.getElementById("authPassword");
-const authSignInBtn = document.getElementById("authSignInBtn");
-const authSignUpBtn = document.getElementById("authSignUpBtn");
-const authCloseBtn = document.getElementById("authCloseBtn");
-const authError = document.getElementById("authError");
-const authStatus = document.getElementById("authStatus");
-const syncNowBtn = document.getElementById("syncNowBtn");
+  // Mark JS alive
+  set('dbg-js', true, 'JS OK');
 
-function openAuth(){ if (!authBackdrop) return; authBackdrop.style.display='flex'; authBackdrop.setAttribute('aria-hidden','false'); setTimeout(()=>authEmail&&authEmail.focus(),0); }
-function closeAuth(){ if (!authBackdrop) return; authBackdrop.style.display='none'; authBackdrop.setAttribute('aria-hidden','true'); if (authError) authError.textContent=''; }
+  window.addEventListener('error', (ev)=> logErr('window.onerror: '+ (ev?.message||ev)));
+  window.addEventListener('unhandledrejection', (ev)=> logErr('unhandledrejection: '+ (ev?.reason?.message || ev?.reason || ev)));
 
-if (authCloseBtn) authCloseBtn.addEventListener("click", closeAuth);
+  document.addEventListener('DOMContentLoaded', async () => {
+    set('dbg-dom', true, 'DOM OK');
 
-if (authSignInBtn) {
-  authSignInBtn.addEventListener("click", async () => {
-    try {
-      if (authError) authError.textContent="";
-      const email = (authEmail?.value||"").trim();
-      const password = authPassword?.value||"";
-      if (!email || !password) { if (authError) authError.textContent="Введите e-mail и пароль"; return; }
-      if (!supa) { if (authError) authError.textContent="Supabase не инициализирован. Проверьте ключи."; return; }
-      const { error } = await supa.auth.signInWithPassword({ email, password });
-      if (error) { if (authError) authError.textContent = error.message; return; }
-      closeAuth();
-      await remoteFetchAndApplyState(); // pulls cloud; if missing row → pushes local
-      refreshAuthStatusSafe();
+    const authBackdrop = $('authBackdrop');
+    const authEmail = $('authEmail');
+    const authPassword = $('authPassword');
+    const authSignInBtn = $('authSignInBtn');
+    const authCloseBtn = $('authCloseBtn');
+    const authError = $('authError');
+    const authStatus = $('authStatus');
+    const syncNowBtn = $('syncNowBtn');
+    const openAuthBtn = $('openAuthBtn');
 
-  function showToast(msg, ok=false){
-    const t = document.getElementById('toast'); if(!t) return;
-    t.className = ok ? 'ok' : 'err';
-    t.textContent = String(msg||''); t.style.display='block';
-    setTimeout(()=>{ t.style.display='none'; }, 5000);
-  }
+    function openAuth(){ authBackdrop.style.display='flex'; authBackdrop.setAttribute('aria-hidden','false'); setTimeout(()=>authEmail?.focus(),0); }
+    function closeAuth(){ authBackdrop.style.display='none'; authBackdrop.setAttribute('aria-hidden','true'); authError.textContent=''; }
 
-  const diagBtn = document.getElementById('diagBtn');
-  if (diagBtn){
-    diagBtn.addEventListener('click', async ()=>{
+    $('dbgOpen')?.addEventListener('click', openAuth);
+    $('dbgDiag')?.addEventListener('click', async ()=>{
       try{
-        if(!supa){ showToast('Supabase клиент не инициализирован. Проверьте URL/KEY в файле.', false); return; }
-        const { data: sessionData, error: sErr } = await supa.auth.getSession();
-        if (sErr) { showToast('auth.getSession error: '+ sErr.message, false); return; }
-        if (!sessionData?.session){ showToast('Сессии нет. Нажмите "Войти" и авторизуйтесь.', false); return; }
-        const { data, error } = await supa.from(SUPA_TABLE).select('year').limit(1);
-        if (error) { showToast('DB select error: '+ error.message, false); return; }
-        showToast('Соединение ОК. Сессия активна. База доступна.', true);
-      } catch(e){ showToast('Diag exception: '+ (e?.message||e), false); }
+        if(!window.supabase){ set('dbg-sdk', false, 'SDK FAIL'); logErr('Supabase SDK не загрузился (CSP/сеть/CDN)'); return; }
+        set('dbg-sdk', true, 'SDK OK');
+        const supa = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+        set('dbg-supa', !!supa, supa ? 'Client OK' : 'Client FAIL');
+        const { data, error } = await supa.auth.getSession();
+        if (error){ set('dbg-auth', false, 'Auth ERR'); logErr('getSession: '+error.message); return; }
+        set('dbg-auth', !!data?.session, data?.session ? 'Auth: Signed in' : 'Auth: Signed out');
+        const probe = await supa.from(SUPA_TABLE).select('year').limit(1);
+        if (probe.error){ set('dbg-db', false, 'DB ERR'); logErr('DB probe: '+probe.error.message); return; }
+        set('dbg-db', true, 'DB OK');
+      }catch(e){ logErr('Diag exception: '+ (e?.message||e)); }
     });
-  }
 
-  async function refreshAuthStatusSafe(){
-    try{
-      if (!authStatus) return;
-      if (!supa) { authStatus.textContent='Offline'; return; }
-      const { data, error } = await supa.auth.getSession();
-      if (error){ authStatus.textContent='Ошибка'; showToast('getSession: '+ error.message, false); return; }
-      authStatus.textContent = data?.session ? 'Signed in' : 'Signed out';
-    }catch(e){ authStatus.textContent='Ошибка'; showToast('refreshAuthStatus exception: '+ (e?.message||e), false); }
-  }
-  // Replace previous calls
+    if (authCloseBtn) authCloseBtn.addEventListener('click', closeAuth);
+    if (openAuthBtn) openAuthBtn.addEventListener('click', openAuth);
 
-    } catch(e){ if (authError) authError.textContent="Ошибка входа"; }
-  });
-}
+    let supa = null;
+    if (window.supabase){ set('dbg-sdk', true, 'SDK OK'); supa = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY); set('dbg-supa', !!supa, supa ? 'Client OK' : 'Client FAIL'); }
+    else { set('dbg-sdk', false, 'SDK FAIL'); }
 
-if (authSignUpBtn) {
-  authSignUpBtn.addEventListener("click", async () => {
-    try {
-      if (authError) authError.textContent="";
-      const email = (authEmail?.value||"").trim();
-      const password = authPassword?.value||"";
-      if (!email || !password) { if (authError) authError.textContent="Введите e-mail и пароль"; return; }
-      if (!supa) { if (authError) authError.textContent="Supabase не инициализирован."; return; }
-      const { error } = await supa.auth.signUp({ email, password });
-      if (error) { if (authError) authError.textContent = error.message; return; }
-      if (authError){ authError.style.color="#a8f5a2"; authError.textContent="Регистрация отправлена. Если включено подтверждение — проверьте почту, либо создайте пользователя в панели Supabase."; }
-    } catch(e){ if (authError) authError.textContent="Ошибка регистрации"; }
-  });
-}
-
-// Status
-async function refreshAuthStatus(){
-  return refreshAuthStatusSafe();
-}
-async function legacyRefreshAuthStatus(){
-  if (!authStatus) return;
-  if (!supa) { authStatus.textContent="Offline"; return; }
-  const { data } = await supa.auth.getSession();
-  authStatus.textContent = data?.session ? "Signed in" : "Signed out";
-}
-if (supa){ supa.auth.onAuthStateChange(()=>refreshAuthStatusSafe()); }
-
-async function remoteFetchAndApplyState(){
-  if (!supa) return;
-  const { data: sessionData } = await supa.auth.getSession();
-  if (!sessionData?.session) { openAuth(); return; }
-  const { data, error } = await supa.from(SUPA_TABLE).select("state").eq("year", YEAR).single();
-  if (error){
-    if (error.code == "PGRST116"){ // no row
-      await remoteUpsertState();
-      return;
-    } else {
-      console.warn("Supabase load error:", error);
-      return;
+    async function refreshStatus(){
+      try{
+        if (!supa){ authStatus.textContent='Offline'; set('dbg-auth', false, 'Auth: Offline'); return; }
+        const { data, error } = await supa.auth.getSession();
+        if (error){ authStatus.textContent='Ошибка'; set('dbg-auth', false, 'Auth ERR'); logErr('getSession: '+error.message); return; }
+        const signed = !!data?.session;
+        authStatus.textContent = signed ? 'Signed in' : 'Signed out';
+        set('dbg-auth', signed, signed ? 'Auth: Signed in' : 'Auth: Signed out');
+      }catch(e){ authStatus.textContent='Ошибка'; set('dbg-auth', false, 'Auth EXC'); logErr('refreshStatus: '+ (e?.message||e)); }
     }
-  }
-  if (data?.state){
-    try {
-      model = migrate(data.state);
-      localStorage.setItem(storeKey, JSON.stringify(model));
-      rebuildBody();
-    } catch(e){ console.warn("Apply remote state failed", e); }
-  }
-}
 
-async function remoteUpsertState(){
-  try {
-    if (!supa) return;
-    const { data: sessionData } = await supa.auth.getSession();
-    if (!sessionData?.session) return;
-    const payload = { year: YEAR, state: model };
-    const { error } = await supa.from(SUPA_TABLE).upsert(payload, { onConflict: "user_id,year" });
-    if (error) console.warn("Supabase upsert error:", error);
-  } catch(e){ console.warn("Supabase upsert failed", e); }
-}
+    if (authSignInBtn) authSignInBtn.addEventListener('click', async ()=>{
+      try{
+        authError.textContent='';
+        if (!supa){ authError.textContent='Supabase Offline (SDK не загрузился)'; return; }
+        const email=(authEmail.value||'').trim(); const password=authPassword.value||'';
+        if(!email || !password){ authError.textContent='Введите e-mail и пароль'; return; }
+        const { error } = await supa.auth.signInWithPassword({ email, password });
+        if (error){ authError.textContent = error.message; return; }
+        closeAuth();
+        await refreshStatus();
+      }catch(e){ authError.textContent='Ошибка входа: '+ (e?.message||e); }
+    });
+
+    if (syncNowBtn) syncNowBtn.addEventListener('click', async ()=>{
+      // No-op here; this is a UI test build. We just reflect the status.
+      await refreshStatus();
+    });
+
+    // Initial status
+    await refreshStatus();
+  });
+})();
 
   const YEAR = 2025;
   const MONTHS = ["Янв","Фев","Мар","Апр","Май","Июн","Июл","Авг","Сен","Окт","Ноя","Дек"];
@@ -432,7 +373,6 @@ async function remoteUpsertState(){
     localStorage.setItem(storeKey, JSON.stringify(model));
     renderTotalsPanel();
     syncTotalsLayout();
-    remoteUpsertState();
   }
 
   const fmt = new Intl.NumberFormat("ru-RU", { style: "currency", currency: "EUR", maximumFractionDigits: 2 });
@@ -654,7 +594,8 @@ async function remoteUpsertState(){
       td.className = "cell"; td.dataset.section = section; td.dataset.categoryId = idx; td.dataset.month = m;
       td.textContent = formatCellTotal(getCategoryAndSubsTotal(section, idx, m));
       td.addEventListener("click", onCellClick);
-          td.addEventListener("contextmenu", (e) => { e.preventDefault(); e.stopPropagation(); openCtx(e.clientX, e.clientY, { type: "cell", section, categoryId: idx, month: m, tdRef: td }); });
+          td.addEventListener("contextmenu", (e) => { e.preventDefault(); e.stopPropagation(); openCtx(e.clientX, e.clientY, { type: "cell", section, categoryId: idx, month: m, subId: sidx, tdRef: td }); });
+      td.addEventListener("contextmenu", (e) => { e.preventDefault(); e.stopPropagation(); openCtx(e.clientX, e.clientY, { type: "cell", section, categoryId: idx, month: m, tdRef: td }); });
       tr.appendChild(td);
     }
 
@@ -1286,52 +1227,7 @@ async function remoteUpsertState(){
   renderCurrentMonthHighlight();
   renderTotalsPanel();
   updateProgressAll();
-  if (supa) { remoteFetchAndApplyState(); }
-  if (syncNowBtn) syncNowBtn.addEventListener('click', ()=>{ if (supa) remoteFetchAndApplyState(); });
-  refreshAuthStatusSafe();
-
-  function showToast(msg, ok=false){
-    const t = document.getElementById('toast'); if(!t) return;
-    t.className = ok ? 'ok' : 'err';
-    t.textContent = String(msg||''); t.style.display='block';
-    setTimeout(()=>{ t.style.display='none'; }, 5000);
-  }
-
-  const diagBtn = document.getElementById('diagBtn');
-  if (diagBtn){
-    diagBtn.addEventListener('click', async ()=>{
-      try{
-        if(!supa){ showToast('Supabase клиент не инициализирован. Проверьте URL/KEY в файле.', false); return; }
-        const { data: sessionData, error: sErr } = await supa.auth.getSession();
-        if (sErr) { showToast('auth.getSession error: '+ sErr.message, false); return; }
-        if (!sessionData?.session){ showToast('Сессии нет. Нажмите "Войти" и авторизуйтесь.', false); return; }
-        const { data, error } = await supa.from(SUPA_TABLE).select('year').limit(1);
-        if (error) { showToast('DB select error: '+ error.message, false); return; }
-        showToast('Соединение ОК. Сессия активна. База доступна.', true);
-      } catch(e){ showToast('Diag exception: '+ (e?.message||e), false); }
-    });
-  }
-
-  async function refreshAuthStatusSafe(){
-    try{
-      if (!authStatus) return;
-      if (!supa) { authStatus.textContent='Offline'; return; }
-      const { data, error } = await supa.auth.getSession();
-      if (error){ authStatus.textContent='Ошибка'; showToast('getSession: '+ error.message, false); return; }
-      authStatus.textContent = data?.session ? 'Signed in' : 'Signed out';
-    }catch(e){ authStatus.textContent='Ошибка'; showToast('refreshAuthStatus exception: '+ (e?.message||e), false); }
-  }
-  // Replace previous calls
-
 })();
 </script>
-
-  <style>
-    #toast{position:fixed;right:12px;bottom:110px;z-index:9999;max-width:420px;padding:12px 14px;border-radius:10px;border:1px solid #3a4256;background:#0f131a;box-shadow:0 6px 24px rgba(0,0,0,.4);font-size:12px;line-height:1.4;display:none;white-space:pre-wrap}
-    #toast.ok{border-color:#2a7b4b}
-    #toast.err{border-color:#7b2d2d}
-  </style>
-  <div id="toast"></div>
-
 </body>
 </html>
